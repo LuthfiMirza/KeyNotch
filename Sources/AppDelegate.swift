@@ -18,6 +18,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         MicrophoneService.shared.startMonitoring()
         FullScreenMonitorService.shared.startMonitoring()
         MediaRemoteService.shared.refreshNowPlaying()
+        _ = ClipboardService.shared
         
         // Setup Menu Bar Tray Icon
         setupStatusItem()
@@ -135,6 +136,26 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         colorItem.target = self
         menu.addItem(colorItem)
         
+        // Plain-Text Sanitizer Toggle
+        let cleanTextItem = NSMenuItem(
+            title: "Clean Plain-Text Sanitizer",
+            action: #selector(togglePlainTextCleaner),
+            keyEquivalent: ""
+        )
+        cleanTextItem.target = self
+        cleanTextItem.state = ClipboardService.shared.autoCleanPlainText ? .on : .off
+        menu.addItem(cleanTextItem)
+        
+        // Paste Next from Sequential Queue
+        let pasteQueueItem = NSMenuItem(
+            title: "Paste Next Snippet (Queue)",
+            action: #selector(pasteNextInQueue),
+            keyEquivalent: "v"
+        )
+        pasteQueueItem.keyEquivalentModifierMask = [.option, .shift]
+        pasteQueueItem.target = self
+        menu.addItem(pasteQueueItem)
+        
         menu.addItem(NSMenuItem.separator())
         
         // HUD Live Previews
@@ -186,6 +207,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
     
     @objc private func toggleMicMute() {
         MicrophoneService.shared.toggleMute()
+    }
+    
+    @objc private func togglePlainTextCleaner() {
+        ClipboardService.shared.toggleAutoCleanPlainText()
+    }
+    
+    @objc private func pasteNextInQueue() {
+        ClipboardService.shared.popNextInQueue()
     }
     
     @objc private func toggleHideIsland() {
