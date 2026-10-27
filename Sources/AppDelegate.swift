@@ -14,6 +14,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         // Initialize Background Telemetry & Interceptor Services
         HUDInterceptorService.shared.startMonitoring()
         BatteryService.shared.updateBatteryState(isInitial: true)
+        BluetoothService.shared.startMonitoring()
         MediaRemoteService.shared.refreshNowPlaying()
         
         // Setup Menu Bar Tray Icon
@@ -113,6 +114,25 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         
         menu.addItem(NSMenuItem.separator())
         
+        // HUD Live Previews
+        let testChargingItem = NSMenuItem(
+            title: "⚡ Test Charging HUD (70%)",
+            action: #selector(testChargingHUD),
+            keyEquivalent: ""
+        )
+        testChargingItem.target = self
+        menu.addItem(testChargingItem)
+        
+        let testBluetoothItem = NSMenuItem(
+            title: "🎧 Test Bluetooth HUD (AirBuds Pro)",
+            action: #selector(testBluetoothHUD),
+            keyEquivalent: ""
+        )
+        testBluetoothItem.target = self
+        menu.addItem(testBluetoothItem)
+        
+        menu.addItem(NSMenuItem.separator())
+        
         // Quit
         let quitItem = NSMenuItem(
             title: "Quit KeyNotch",
@@ -151,6 +171,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
                 value: 0.75
             )
         )
+    }
+    
+    @objc private func testChargingHUD() {
+        BatteryService.shared.triggerTestChargingHUD(percent: 70)
+    }
+    
+    @objc private func testBluetoothHUD() {
+        BluetoothService.shared.triggerTestBluetoothHUD(name: "AirBuds Pro", battery: 70)
     }
     
     @objc private func pickScreenColor() {
