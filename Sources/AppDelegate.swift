@@ -19,6 +19,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         FullScreenMonitorService.shared.startMonitoring()
         MediaRemoteService.shared.refreshNowPlaying()
         _ = ClipboardService.shared
+        _ = NetworkMonitorService.shared
         
         // Setup Menu Bar Tray Icon
         setupStatusItem()
@@ -156,6 +157,16 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         pasteQueueItem.target = self
         menu.addItem(pasteQueueItem)
         
+        // Network Speed in Compact Notch
+        let netItem = NSMenuItem(
+            title: "Network Speed in Notch",
+            action: #selector(toggleNetworkSpeedInNotch),
+            keyEquivalent: ""
+        )
+        netItem.target = self
+        netItem.state = NetworkMonitorService.shared.showInCompactNotch ? .on : .off
+        menu.addItem(netItem)
+        
         menu.addItem(NSMenuItem.separator())
         
         // HUD Live Previews
@@ -215,6 +226,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
     
     @objc private func pasteNextInQueue() {
         ClipboardService.shared.popNextInQueue()
+    }
+    
+    @objc private func toggleNetworkSpeedInNotch() {
+        NetworkMonitorService.shared.toggleShowInCompactNotch()
     }
     
     @objc private func toggleHideIsland() {
