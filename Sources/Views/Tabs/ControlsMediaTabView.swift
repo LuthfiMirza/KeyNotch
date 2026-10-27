@@ -8,6 +8,7 @@ public struct ControlsMediaTabView: View {
     @ObservedObject var caffeinate = CaffeinateService.shared
     @ObservedObject var hud = HUDInterceptorService.shared
     @ObservedObject var devTools = DevToolsService.shared
+    @ObservedObject var mic = MicrophoneService.shared
     
     @State private var wifiName: String = "Wi-Fi"
     @State private var isFocusActive: Bool = false
@@ -237,6 +238,32 @@ public struct ControlsMediaTabView: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 6)
                     .background(Color.white.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(PlainButtonStyle())
+                
+                // Microphone Privacy & Global Mute Button
+                Button(action: {
+                    mic.toggleMute()
+                }) {
+                    HStack(spacing: 5) {
+                        Image(systemName: mic.isMuted ? "mic.slash.fill" : (mic.isMicInUse ? "mic.fill" : "mic"))
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(mic.isMuted ? .red : (mic.isMicInUse ? .orange : .white.opacity(0.6)))
+                        
+                        Text(mic.isMuted ? "Muted" : (mic.isMicInUse ? "Mic Live" : "Mic On"))
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .background(
+                        mic.isMuted
+                        ? Color.red.opacity(0.22)
+                        : (mic.isMicInUse ? Color.orange.opacity(0.22) : Color.white.opacity(0.08))
+                    )
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(PlainButtonStyle())
