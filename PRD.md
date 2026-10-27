@@ -22,6 +22,7 @@ Build a super-lightweight (~2 MB binary, ~0.0% idle CPU), native macOS Dynamic I
      - **Tab 1: Media & Controls** (Now Playing, System Stats, iOS Control Center, Caffeinate, Dev Ports, Color Picker).
      - **Tab 2: Shelf & Clipboard** (File Drop Zone, Quick Image Converter/OCR, Clipboard History).
      - **Tab 3: Focus & Notes** (Quick Notes/Reminders with checkboxes, Pomodoro Timer).
+     - **Tab 4: Market & Crypto** (Live USD/IDR, BTC, ETH, BBCA, AAPL, NVDA with category filters, live quotes & pin to compact notch).
    - **HUD Toast State (Transient)**: `280px × 46px` floating capsule for Volume, Brightness, Caps Lock (`1.4s` auto-dismiss), MagSafe Charging, and Bluetooth connect.
 
 ## 4. Functional Requirements (18 Core Modules)
@@ -71,6 +72,7 @@ KeyNotch/
     │   ├── HUDInterceptorService.swift
     │   ├── MicrophoneService.swift
     │   ├── NetworkMonitorService.swift
+    │   ├── MarketTickerService.swift
     │   ├── FileConverterService.swift
     │   └── DevToolsService.swift
     └── Views/
@@ -80,7 +82,8 @@ KeyNotch/
         ├── Tabs/
         │   ├── ControlsMediaTabView.swift
         │   ├── ShelfClipboardTabView.swift
-        │   └── NotesTimerTabView.swift
+        │   ├── NotesTimerTabView.swift
+        │   └── MarketTabView.swift
         └── Components/
             ├── WaveformView.swift
             └── CapsuleSliderView.swift
