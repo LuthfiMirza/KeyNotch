@@ -61,11 +61,12 @@ ARCH=$(uname -m)
 TARGET="${ARCH}-apple-macos12.0"
 echo "-> Target Architecture: ${TARGET}"
 
-# 4. Compile with swiftc
-echo "-> Compiling native binary via swiftc..."
+# 4. Compile with swiftc (Optimized for size & dead-code stripped)
+echo "-> Compiling native binary via swiftc with -Osize & -dead_strip..."
 swiftc \
-    -O \
+    -Osize \
     -target "${TARGET}" \
+    -Xlinker -dead_strip \
     -framework Cocoa \
     -framework SwiftUI \
     -framework IOKit \
@@ -78,7 +79,10 @@ swiftc \
     ${SWIFT_FILES} \
     -o "${BINARY_PATH}"
 
-# 5. Ad-hoc codesign for local execution
+# 5. Strip local symbols & ad-hoc codesign
+echo "-> Stripping local symbols for minimal footprint..."
+strip -x "${BINARY_PATH}" 2>/dev/null || true
+
 echo "-> Signing app bundle (ad-hoc)..."
 codesign --force --deep --sign - "${APP_BUNDLE}" 2>/dev/null || true
 
