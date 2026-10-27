@@ -64,6 +64,7 @@ public final class NotchWindowController: NSObject {
         NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
             .sink { [weak self] _ in
                 DispatchQueue.main.async {
+                    IslandState.shared.updateScreenMetrics()
                     self?.recenter()
                 }
             }
@@ -140,15 +141,15 @@ public final class NotchWindowController: NSObject {
             height = (hud.type == .battery || hud.type == .bluetooth) ? 42 : 46
         } else if state.isHoverPeekMode {
             if state.isPeeking {
-                width = 210
-                height = 32
+                width = state.notchWidth
+                height = state.notchHeight
             } else {
                 width = 180
                 height = 6 // slight buffer for micro-lip
             }
         } else {
-            width = 210
-            height = 32
+            width = state.notchWidth
+            height = state.notchHeight
         }
         
         let x = screen.frame.midX - (width / 2)
