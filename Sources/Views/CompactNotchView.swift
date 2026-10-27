@@ -68,7 +68,7 @@ public struct CompactNotchView: View {
             .frame(width: 48, alignment: .trailing)
             .padding(.trailing, 14)
         }
-        .frame(height: 32)
+        .frame(height: state.notchHeight)
         .contentShape(Rectangle())
         .onTapGesture {
             state.toggleExpand()
