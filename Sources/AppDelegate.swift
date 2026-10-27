@@ -24,6 +24,27 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         
         // Setup Menu Bar Tray Icon
         setupStatusItem()
+        
+        // Setup IPC Test Notifications
+        setupIPCNotifications()
+    }
+    
+    private func setupIPCNotifications() {
+        DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("com.keynotch.triggerChargingHUD"),
+            object: nil,
+            queue: .main
+        ) { _ in
+            BatteryService.shared.triggerTestChargingHUD(percent: 70)
+        }
+        
+        DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("com.keynotch.triggerBluetoothHUD"),
+            object: nil,
+            queue: .main
+        ) { _ in
+            BluetoothService.shared.triggerTestBluetoothHUD(name: "AirBuds Pro", battery: 70)
+        }
     }
     
     // MARK: - Menu Bar Setup
