@@ -82,11 +82,34 @@ public final class IslandState: ObservableObject {
     @Published public var notchWidth: CGFloat = 210
     @Published public var notchHeight: CGFloat = 36
     
+    // Full Screen Auto-Hide
+    @Published public var autoHideOnFullScreen: Bool {
+        didSet {
+            UserDefaults.standard.set(autoHideOnFullScreen, forKey: "autoHideOnFullScreen")
+        }
+    }
+    @Published public var isFullScreenAppActive: Bool = false
+    
+    public var shouldHideForFullScreen: Bool {
+        autoHideOnFullScreen && isFullScreenAppActive && !isPeeking && !isExpanded && activeHUD == nil
+    }
+    
     private var hudDismissTimer: AnyCancellable?
     
     private init() {
         self.isHoverPeekMode = UserDefaults.standard.bool(forKey: "isHoverPeekMode")
+        if UserDefaults.standard.object(forKey: "autoHideOnFullScreen") == nil {
+            self.autoHideOnFullScreen = true
+        } else {
+            self.autoHideOnFullScreen = UserDefaults.standard.bool(forKey: "autoHideOnFullScreen")
+        }
         updateScreenMetrics()
+    }
+    
+    public func toggleAutoHideFullScreen() {
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+            autoHideOnFullScreen.toggle()
+        }
     }
     
     public func updateScreenMetrics() {
