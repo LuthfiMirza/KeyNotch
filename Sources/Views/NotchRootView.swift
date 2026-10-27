@@ -19,9 +19,9 @@ public struct NotchRootView: View {
             return 280
         }
         if state.isHoverPeekMode {
-            return state.isPeeking ? 210 : 180
+            return state.isPeeking ? state.notchWidth : 180
         }
-        return 210
+        return state.notchWidth
     }
     
     private var currentHeight: CGFloat {
@@ -31,9 +31,9 @@ public struct NotchRootView: View {
             return (hud.type == .battery || hud.type == .bluetooth) ? 42 : 46
         }
         if state.isHoverPeekMode {
-            return state.isPeeking ? 32 : 4
+            return state.isPeeking ? state.notchHeight : 4
         }
-        return 32
+        return state.notchHeight
     }
     
     private var currentCornerRadius: CGFloat {
@@ -42,20 +42,28 @@ public struct NotchRootView: View {
             return (hud.type == .battery || hud.type == .bluetooth) ? 21 : 20
         }
         if isMicroLip { return 2 }
-        return 16
+        return state.hasPhysicalNotch ? 14 : 18
     }
     
     public var body: some View {
         VStack(spacing: 0) {
             if !state.isHidden {
                 ZStack(alignment: .top) {
-                    // Background Notch Shape (Flush with top bezel, squircle bottom corners)
-                    NotchShape(cornerRadius: currentCornerRadius)
-                        .fill(Color.black)
-                        .overlay(
-                            NotchShape(cornerRadius: currentCornerRadius)
-                                .stroke(Color.white.opacity(0.14), lineWidth: 1)
+                    // Background Notch Shape (Adaptive: Apple Notch or Dynamic Island Pill)
+                    NotchShape(
+                        cornerRadius: currentCornerRadius,
+                        topShoulderRadius: state.hasPhysicalNotch ? 8 : 0,
+                        hasPhysicalNotch: state.hasPhysicalNotch
+                    )
+                    .fill(Color.black)
+                    .overlay(
+                        NotchShape(
+                            cornerRadius: currentCornerRadius,
+                            topShoulderRadius: state.hasPhysicalNotch ? 8 : 0,
+                            hasPhysicalNotch: state.hasPhysicalNotch
                         )
+                        .stroke(Color.white.opacity(0.14), lineWidth: 1)
+                    )
                         .shadow(
                             color: Color.black.opacity(state.isExpanded ? 0.5 : 0.25),
                             radius: state.isExpanded ? 18 : 6,
