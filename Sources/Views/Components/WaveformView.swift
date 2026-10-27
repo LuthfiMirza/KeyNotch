@@ -6,9 +6,15 @@ public struct WaveformView: View {
     let barCount: Int
     let maxHeight: CGFloat
     
-    // Resting heights matching authentic audio glyph: [0.38, 0.75, 1.0, 0.6]
-    @State private var barHeights: [CGFloat] = [0.38, 0.75, 1.0, 0.6]
-    @State private var isAnimating: Bool = false
+    // Resting heights matching authentic Apple Music equalizer glyph
+    private let restingHeights: [CGFloat] = [0.38, 0.75, 1.0, 0.6]
+    // Distinct target heights for organic non-uniform audio spectrum feel
+    private let targetHeights: [CGFloat] = [0.95, 0.35, 0.85, 0.45]
+    // Non-harmonic cycle durations so bars never pulse in robotic lockstep
+    private let cycleDurations: [Double] = [0.45, 0.34, 0.52, 0.39]
+    private let delays: [Double] = [0.0, 0.08, 0.04, 0.12]
+    
+    @State private var animated: Bool = false
     
     public init(
         isPlaying: Bool,
@@ -29,51 +35,36 @@ public struct WaveformView: View {
                     .fill(color)
                     .frame(
                         width: 3.0,
-                        height: max(4.0, barHeights[index % barHeights.count] * maxHeight)
+                        height: currentHeight(for: index)
+                    )
+                    .animation(
+                        isPlaying && animated
+                            ? Animation.easeInOut(duration: cycleDurations[index % cycleDurations.count])
+                                .repeatForever(autoreverses: true)
+                                .delay(delays[index % delays.count])
+                            : .easeOut(duration: 0.25),
+                        value: animated
                     )
             }
         }
         .frame(height: maxHeight)
         .onAppear {
             if isPlaying {
-                startAnimation()
+                animated = true
             }
         }
         .onChange(of: isPlaying) { playing in
-            if playing {
-                startAnimation()
-            } else {
-                stopAnimation()
-            }
+            animated = playing
         }
     }
     
-    private func startAnimation() {
-        guard !isAnimating else { return }
-        isAnimating = true
-        animateBars()
-    }
-    
-    private func stopAnimation() {
-        isAnimating = false
-        withAnimation(.easeOut(duration: 0.3)) {
-            barHeights = [0.38, 0.75, 1.0, 0.6]
+    private func currentHeight(for index: Int) -> CGFloat {
+        let baseHeight: CGFloat
+        if isPlaying && animated {
+            baseHeight = targetHeights[index % targetHeights.count]
+        } else {
+            baseHeight = restingHeights[index % restingHeights.count]
         }
-    }
-    
-    private func animateBars() {
-        guard isAnimating && isPlaying else { return }
-        
-        withAnimation(.easeInOut(duration: 0.32)) {
-            barHeights = (0..<barCount).map { _ in
-                CGFloat.random(in: 0.25...1.0)
-            }
-        }
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.33) {
-            if self.isAnimating && self.isPlaying {
-                self.animateBars()
-            }
-        }
+        return max(3.5, baseHeight * maxHeight)
     }
 }
