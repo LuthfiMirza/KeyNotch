@@ -42,18 +42,18 @@ public struct HUDToastView: View {
                 standardToastView
             }
         }
-        .frame(height: 42)
+        .frame(height: payload.type == .battery ? 52 : (payload.type == .bluetooth ? 48 : 46))
     }
     
-    // MARK: - 1. Charging Toast (Matches Screenshot 1)
+    // MARK: - 1. Charging Toast (Enlarged Morphing Capsule 370x52)
     
     private var chargingToastView: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 14) {
             // Circular Battery Ring with Lightning Bolt in center
             ZStack {
                 // Background Track
                 Circle()
-                    .stroke(chargingGreen.opacity(0.25), lineWidth: 3.5)
+                    .stroke(chargingGreen.opacity(0.22), lineWidth: 3.5)
                 
                 // Progress Stroke
                 Circle()
@@ -67,41 +67,41 @@ public struct HUDToastView: View {
                 // Center Dark Background
                 Circle()
                     .fill(Color.black.opacity(0.85))
-                    .frame(width: 17, height: 17)
+                    .frame(width: 22, height: 22)
                 
                 // Center Bolt
                 Image(systemName: "bolt.fill")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.system(size: 13, weight: .bold))
                     .foregroundColor(.white)
             }
-            .frame(width: 25, height: 25)
-            .padding(.leading, 14)
+            .frame(width: 32, height: 32)
+            .padding(.leading, 18)
             
             // Text: Title & Subtitle
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(payload.title)
-                    .font(.system(size: 13.5, weight: .bold))
+                    .font(.system(size: 14.5, weight: .bold))
                     .foregroundColor(.white)
                     .lineLimit(1)
                 
                 Text(payload.subtitle ?? "Charger connected")
-                    .font(.system(size: 10.5, weight: .regular))
+                    .font(.system(size: 11, weight: .regular))
                     .foregroundColor(.white.opacity(0.65))
                     .lineLimit(1)
             }
             
-            Spacer(minLength: 8)
+            Spacer(minLength: 12)
             
             // Right Large Percentage
             Text(payload.rightDetail ?? "\(Int((payload.value ?? 0.70) * 100))%")
-                .font(.system(size: 19, weight: .regular, design: .default))
+                .font(.system(size: 22, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
                 .monospacedDigit()
-                .padding(.trailing, 16)
+                .padding(.trailing, 20)
         }
     }
     
-    // MARK: - 2. Bluetooth Device Connected Toast (Matches Screenshot 2)
+    // MARK: - 2. Bluetooth Device Connected Toast (Enlarged Capsule 360x48)
     
     private var bluetoothToastView: some View {
         HStack(spacing: 12) {
@@ -109,34 +109,34 @@ public struct HUDToastView: View {
             ZStack {
                 // Background Track
                 Circle()
-                    .stroke(bluetoothBlue.opacity(0.28), lineWidth: 3.5)
+                    .stroke(bluetoothBlue.opacity(0.25), lineWidth: 3.2)
                 
                 // Progress Stroke
                 Circle()
                     .trim(from: 0, to: CGFloat(payload.value ?? 0.70))
                     .stroke(
                         bluetoothBlue,
-                        style: StrokeStyle(lineWidth: 3.5, lineCap: .round)
+                        style: StrokeStyle(lineWidth: 3.2, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
                 
                 // Center Dark Background
                 Circle()
                     .fill(Color.black.opacity(0.85))
-                    .frame(width: 17, height: 17)
+                    .frame(width: 20, height: 20)
                 
                 // Center Bluetooth Rune
                 BluetoothIconShape()
                     .stroke(Color.white, style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
-                    .frame(width: 8, height: 11)
+                    .frame(width: 9, height: 13)
             }
-            .frame(width: 25, height: 25)
-            .padding(.leading, 14)
+            .frame(width: 29, height: 29)
+            .padding(.leading, 16)
             
             // Text: Device Name & Subtitle
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 1.5) {
                 Text(payload.title)
-                    .font(.system(size: 13.5, weight: .bold))
+                    .font(.system(size: 14, weight: .bold))
                     .foregroundColor(.white)
                     .lineLimit(1)
                 
@@ -146,7 +146,7 @@ public struct HUDToastView: View {
                     .lineLimit(1)
             }
             
-            Spacer(minLength: 8)
+            Spacer(minLength: 12)
             
             // Right Concentric Radar Waves with Headphones Icon
             ZStack {
@@ -166,7 +166,7 @@ public struct HUDToastView: View {
                     .font(.system(size: 10, weight: .medium))
                     .foregroundColor(.white)
             }
-            .padding(.trailing, 14)
+            .padding(.trailing, 18)
         }
     }
     
