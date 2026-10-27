@@ -42,25 +42,30 @@ public struct NotchRootView: View {
             return (hud.type == .battery || hud.type == .bluetooth) ? 21 : 20
         }
         if isMicroLip { return 2 }
-        return state.hasPhysicalNotch ? 14 : 18
+        return 18
+    }
+    
+    private var currentShoulderRadius: CGFloat {
+        if isMicroLip { return 0 }
+        if state.isExpanded { return 9 }
+        if state.activeHUD != nil { return 7 }
+        return 7
     }
     
     public var body: some View {
         VStack(spacing: 0) {
             if !state.isHidden {
                 ZStack(alignment: .top) {
-                    // Background Notch Shape (Adaptive: Apple Notch or Dynamic Island Pill)
+                    // Background Notch Shape with refined smooth concave shoulders & squircle corners
                     NotchShape(
                         cornerRadius: currentCornerRadius,
-                        topShoulderRadius: state.hasPhysicalNotch ? 8 : 0,
-                        hasPhysicalNotch: state.hasPhysicalNotch
+                        topShoulderRadius: currentShoulderRadius
                     )
                     .fill(Color.black)
                     .overlay(
                         NotchShape(
                             cornerRadius: currentCornerRadius,
-                            topShoulderRadius: state.hasPhysicalNotch ? 8 : 0,
-                            hasPhysicalNotch: state.hasPhysicalNotch
+                            topShoulderRadius: currentShoulderRadius
                         )
                         .stroke(Color.white.opacity(0.14), lineWidth: 1)
                     )
