@@ -9,76 +9,64 @@ public struct CompactNotchView: View {
     @State private var currentTime: String = ""
     private let timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
     
+    // Vibrant Activity Ring Green
+    private let ringColor = Color(red: 0.18, green: 0.86, blue: 0.44)
+    
     public init() {}
     
+    private var progressValue: Double {
+        if pomodoro.isRunning {
+            return pomodoro.progress
+        } else {
+            return max(0.06, min(1.0, Double(battery.batteryPercentage) / 100.0))
+        }
+    }
+    
     public var body: some View {
-        HStack(spacing: 6) {
-            // Left Indicator (Status / Reactive Audio Waveform)
-            HStack(spacing: 4) {
-                if media.isPlaying {
-                    WaveformView(isPlaying: true, color: .green, barCount: 4, maxHeight: 10)
-                } else {
+        HStack(spacing: 0) {
+            // MARK: - Left: Circular Progress Ring (Activity / Battery / Pomodoro)
+            HStack {
+                ZStack {
+                    // Track
                     Circle()
-                        .fill(Color.green.opacity(0.85))
-                        .frame(width: 5, height: 5)
+                        .stroke(ringColor.opacity(0.22), lineWidth: 3.5)
                     
-                    Image(systemName: "music.note")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundColor(.white.opacity(0.65))
+                    // Progress Stroke
+                    Circle()
+                        .trim(from: 0, to: CGFloat(progressValue))
+                        .stroke(
+                            ringColor,
+                            style: StrokeStyle(lineWidth: 3.5, lineCap: .round)
+                        )
+                        .rotationEffect(.degrees(-90))
+                        .animation(.linear(duration: 0.5), value: progressValue)
                 }
+                .frame(width: 17, height: 17)
             }
             .frame(width: 48, alignment: .leading)
-            .padding(.leading, 10)
+            .padding(.leading, 14)
             
-            Spacer()
+            Spacer(minLength: 0)
             
-            // Center Section: Dead-Center Clock & Pomodoro Badge
-            HStack(spacing: 6) {
-                HStack(spacing: 3) {
-                    Image(systemName: "clock.fill")
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundColor(.white.opacity(0.5))
-                    
-                    Text(currentTime.isEmpty ? formattedCurrentTime() : currentTime)
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .foregroundColor(.white)
-                        .monospacedDigit()
-                }
-                
-                // Small Pomodoro Countdown when active
-                if pomodoro.isRunning {
-                    HStack(spacing: 2) {
-                        Image(systemName: "flame.fill")
-                            .font(.system(size: 7))
-                            .foregroundColor(.orange)
-                        Text(pomodoro.formattedTime)
-                            .font(.system(size: 9, weight: .bold, design: .rounded))
-                            .foregroundColor(.orange)
-                            .monospacedDigit()
-                    }
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1)
-                    .background(Color.orange.opacity(0.2))
-                    .clipShape(Capsule())
-                }
-            }
+            // MARK: - Center: Dead-Center Balanced Clock
+            Text(currentTime.isEmpty ? formattedCurrentTime() : currentTime)
+                .font(.system(size: 15, weight: .bold, design: .rounded))
+                .foregroundColor(.white)
+                .monospacedDigit()
             
-            Spacer()
+            Spacer(minLength: 0)
             
-            // Right Indicator (Battery / Charging Glyph)
-            HStack(spacing: 3) {
-                if battery.isCharging || battery.isConnectedToAC {
-                    Image(systemName: "bolt.fill")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(.green)
-                }
-                
-                Text("\(battery.batteryPercentage)%")
-                    .font(.system(size: 9, weight: .semibold, design: .rounded))
-                    .foregroundColor(.white.opacity(0.75))
+            // MARK: - Right: Reactive Audio Waveform
+            HStack {
+                WaveformView(
+                    isPlaying: media.isPlaying,
+                    color: .white,
+                    barCount: 4,
+                    maxHeight: 15
+                )
             }
             .frame(width: 48, alignment: .trailing)
-            .padding(.trailing, 10)
+            .padding(.trailing, 14)
         }
         .frame(height: 32)
         .contentShape(Rectangle())
