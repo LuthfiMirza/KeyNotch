@@ -38,10 +38,10 @@ Engineered with a **True Zero-Draw** architecture: WindowServer compositing cuts
    - Displays real-time album artwork, live playback status, seek bar, and animated reactive equalizer waveform.
    - Global media controls: Play/Pause, Next Track, and Previous Track.
 
-5. **🔋 Battery & MagSafe Charging HUD:**
+5. **🔋 Battery & MagSafe Charging HUD (Enlarged Morphing Capsule):**
    - Real-time battery status monitoring directly via native `IOKit.ps` (0% CPU impact).
-   - Instant animated charging HUD when connecting/disconnecting MagSafe or power adapter.
-   - Displays exact battery percentage with color-coded battery health indicator.
+   - **Enlarged Morphing Capsule (`370px × 52px`)**: Plugs into charger and expands dynamically from the notch with signature Apple fluid spring bounce (`response: 0.38, dampingFraction: 0.72`), featuring a vibrant neon green progress ring, bold status typography, and crisp `22pt` battery percentage before auto-retracting.
+   - Also supports **🎧 Bluetooth Connect Capsule (`360px × 48px`)** for AirPods, Bluetooth headphones, and peripheral connection alerts.
 
 6. **🔊 Modern System Volume & Brightness HUD:**
    - Replaces the bulky legacy macOS bezel overlays with a sleek, iOS-style animated capsule triggered by keyboard media keys (`F11`/`F12` & Brightness keys).
