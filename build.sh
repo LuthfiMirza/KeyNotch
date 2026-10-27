@@ -74,6 +74,7 @@ swiftc \
     -framework CoreWLAN \
     -framework AudioToolbox \
     -framework AVFoundation \
+    -framework IOBluetooth \
     ${SWIFT_FILES} \
     -o "${BINARY_PATH}"
 
