@@ -6,6 +6,7 @@ public struct CompactNotchView: View {
     @ObservedObject var media = MediaRemoteService.shared
     @ObservedObject var battery = BatteryService.shared
     @ObservedObject var pomodoro = PomodoroService.shared
+    @ObservedObject var mic = MicrophoneService.shared
     
     @State private var currentTime: String = ""
     @State private var clockTimer: AnyCancellable?
@@ -32,24 +33,40 @@ public struct CompactNotchView: View {
     
     public var body: some View {
         HStack(spacing: 0) {
-            // MARK: - Left: Circular Progress Ring (Activity / Battery / Pomodoro)
+            // MARK: - Left: Circular Progress Ring OR Active Microphone Privacy Radar
             HStack {
-                ZStack {
-                    // Track
-                    Circle()
-                        .stroke(ringColor.opacity(0.22), lineWidth: 3.5)
-                    
-                    // Progress Stroke
-                    Circle()
-                        .trim(from: 0, to: CGFloat(progressValue))
-                        .stroke(
-                            ringColor,
-                            style: StrokeStyle(lineWidth: 3.5, lineCap: .round)
-                        )
-                        .rotationEffect(.degrees(-90))
-                        .animation(.linear(duration: 0.5), value: progressValue)
+                if mic.isMicInUse {
+                    Button(action: {
+                        mic.toggleMute()
+                    }) {
+                        ZStack {
+                            Circle()
+                                .fill(mic.isMuted ? Color.red : Color.orange)
+                                .frame(width: 17, height: 17)
+                            Image(systemName: mic.isMuted ? "mic.slash.fill" : "mic.fill")
+                                .font(.system(size: 8.5, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                } else {
+                    ZStack {
+                        // Track
+                        Circle()
+                            .stroke(ringColor.opacity(0.22), lineWidth: 3.5)
+                        
+                        // Progress Stroke
+                        Circle()
+                            .trim(from: 0, to: CGFloat(progressValue))
+                            .stroke(
+                                ringColor,
+                                style: StrokeStyle(lineWidth: 3.5, lineCap: .round)
+                            )
+                            .rotationEffect(.degrees(-90))
+                            .animation(.linear(duration: 0.5), value: progressValue)
+                    }
+                    .frame(width: 17, height: 17)
                 }
-                .frame(width: 17, height: 17)
             }
             .frame(width: 48, alignment: .leading)
             .padding(.leading, 14)
