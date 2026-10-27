@@ -136,6 +136,9 @@ public final class MediaRemoteService: ObservableObject {
                 self.artwork = newArtwork
             }
         } else {
+            self.hasActiveMedia = false
+            self.isPlaying = false
+            self.artwork = nil
             fallbackAppleScriptCheck()
         }
     }
