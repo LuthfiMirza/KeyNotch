@@ -172,6 +172,8 @@ public struct NotchRootView: View {
                     ShelfClipboardTabView()
                 case .notes:
                     NotesTimerTabView()
+                case .market:
+                    MarketTabView()
                 }
             }
             .transition(.opacity)
