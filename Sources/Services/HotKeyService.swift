@@ -4,31 +4,44 @@ import Carbon
 public final class HotKeyService {
     public static let shared = HotKeyService()
     
-    private var hotKeyRef: EventHotKeyRef?
+    private var toggleHotKeyRef: EventHotKeyRef?
+    private var queueHotKeyRef: EventHotKeyRef?
     private var eventHandler: EventHandlerRef?
     
     private init() {}
     
     public func register() {
-        // HotKey identifier ('KNTC', id 1)
-        let signature = OSType(0x4B4E5443)
-        let hotKeyID = EventHotKeyID(signature: signature, id: 1)
+        let signature = OSType(0x4B4E5443) // 'KNTC'
         
-        // Register Option + Space (kVK_Space = 49)
-        let registerStatus = RegisterEventHotKey(
+        // 1. Register Option + Space (id: 1) -> Toggle Island
+        let toggleID = EventHotKeyID(signature: signature, id: 1)
+        let toggleStatus = RegisterEventHotKey(
             UInt32(kVK_Space),
             UInt32(optionKey),
-            hotKeyID,
+            toggleID,
             GetApplicationEventTarget(),
             0,
-            &hotKeyRef
+            &toggleHotKeyRef
         )
-        
-        if registerStatus != noErr {
-            NSLog("[KeyNotch HotKey] Failed to register Option + Space: %d", registerStatus)
-            return
+        if toggleStatus != noErr {
+            NSLog("[KeyNotch HotKey] Failed to register Option + Space: %d", toggleStatus)
         }
         
+        // 2. Register Option + Shift + V (id: 2) -> Paste Next in Sequential Queue
+        let queueID = EventHotKeyID(signature: signature, id: 2)
+        let queueStatus = RegisterEventHotKey(
+            UInt32(kVK_ANSI_V),
+            UInt32(optionKey | shiftKey),
+            queueID,
+            GetApplicationEventTarget(),
+            0,
+            &queueHotKeyRef
+        )
+        if queueStatus != noErr {
+            NSLog("[KeyNotch HotKey] Failed to register Option + Shift + V: %d", queueStatus)
+        }
+        
+        // Install Event Handler for both hotkeys
         var eventType = EventTypeSpec(
             eventClass: OSType(kEventClassKeyboard),
             eventKind: UInt32(kEventHotKeyPressed)
@@ -36,9 +49,26 @@ public final class HotKeyService {
         
         let handlerStatus = InstallEventHandler(
             GetApplicationEventTarget(),
-            { (_, _, _) -> OSStatus in
-                DispatchQueue.main.async {
-                    IslandState.shared.toggleExpand()
+            { (_, event, _) -> OSStatus in
+                var hotKeyID = EventHotKeyID()
+                let status = GetEventParameter(
+                    event,
+                    EventParamName(kEventParamDirectObject),
+                    EventParamType(typeEventHotKeyID),
+                    nil,
+                    MemoryLayout<EventHotKeyID>.size,
+                    nil,
+                    &hotKeyID
+                )
+                
+                if status == noErr {
+                    DispatchQueue.main.async {
+                        if hotKeyID.id == 1 {
+                            IslandState.shared.toggleExpand()
+                        } else if hotKeyID.id == 2 {
+                            ClipboardService.shared.popNextInQueue()
+                        }
+                    }
                 }
                 return noErr
             },
@@ -54,9 +84,13 @@ public final class HotKeyService {
     }
     
     public func unregister() {
-        if let ref = hotKeyRef {
+        if let ref = toggleHotKeyRef {
             UnregisterEventHotKey(ref)
-            hotKeyRef = nil
+            toggleHotKeyRef = nil
+        }
+        if let ref = queueHotKeyRef {
+            UnregisterEventHotKey(ref)
+            queueHotKeyRef = nil
         }
         if let handler = eventHandler {
             RemoveEventHandler(handler)
