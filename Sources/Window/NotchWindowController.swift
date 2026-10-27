@@ -87,6 +87,36 @@ public final class NotchWindowController: NSObject {
                 }
             }
             .store(in: &cancellables)
+            
+        // True Zero-Draw: cut WindowServer compositing entirely when hidden / full-screen
+        Publishers.CombineLatest4(
+            state.$isHidden,
+            state.$autoHideOnFullScreen,
+            state.$isFullScreenAppActive,
+            state.$isPeeking
+        )
+        .combineLatest(state.$isExpanded, state.$activeHUD)
+        .receive(on: RunLoop.main)
+        .sink { [weak self] combined, expanded, activeHUD in
+            guard let self = self, let panel = self.panel else { return }
+            let (isHidden, autoHideFS, isFS, isPeeking) = combined
+            let shouldHide = isHidden || (autoHideFS && isFS && !isPeeking && !expanded && activeHUD == nil)
+            
+            if shouldHide {
+                // Wait for spring slide-up animation to complete before removing from WindowServer compositing
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.38) {
+                    if IslandState.shared.shouldHideForFullScreen || IslandState.shared.isHidden {
+                        panel.orderOut(nil)
+                    }
+                }
+            } else {
+                // Immediately attach window to compositor before slide-down animation begins
+                if !panel.isVisible {
+                    panel.orderFrontRegardless()
+                }
+            }
+        }
+        .store(in: &cancellables)
     }
     
     // MARK: - Mouse Event Monitoring & Smart Pass-Through
@@ -158,58 +188,60 @@ public final class NotchWindowController: NSObject {
     }
     
     private func handleCursorLocation(_ location: NSPoint, isDragging: Bool) {
-        guard let panel = panel, let screen = NSScreen.main else { return }
-        let state = IslandState.shared
-        let activeRect = activeNotchScreenRect()
-        
-        let isInside = activeRect.contains(location)
-        
-        // Smart pass-through: If cursor is outside the visible shape, pass clicks to underlying windows
-        if panel.ignoresMouseEvents == isInside {
-            panel.ignoresMouseEvents = !isInside
-        }
-        
-        // Hover Peek Detection (Hover Peek Mode or Full Screen Auto-Hide)
-        if state.isHoverPeekMode && !state.isExpanded {
-            let distanceFromTop = screen.frame.maxY - location.y
-            let horizontalDistance = abs(location.x - screen.frame.midX)
+        autoreleasepool {
+            guard let panel = panel, let screen = NSScreen.main else { return }
+            let state = IslandState.shared
+            let activeRect = activeNotchScreenRect()
             
-            if distanceFromTop <= 4 && horizontalDistance <= (activeRect.width / 2 + 40) {
-                if !state.isPeeking {
+            let isInside = activeRect.contains(location)
+            
+            // Smart pass-through: If cursor is outside the visible shape, pass clicks to underlying windows
+            if panel.ignoresMouseEvents == isInside {
+                panel.ignoresMouseEvents = !isInside
+            }
+            
+            // Hover Peek Detection (Hover Peek Mode or Full Screen Auto-Hide)
+            if state.isHoverPeekMode && !state.isExpanded {
+                let distanceFromTop = screen.frame.maxY - location.y
+                let horizontalDistance = abs(location.x - screen.frame.midX)
+                
+                if distanceFromTop <= 4 && horizontalDistance <= (activeRect.width / 2 + 40) {
+                    if !state.isPeeking {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+                            state.isPeeking = true
+                        }
+                    }
+                } else if state.isPeeking && distanceFromTop > (activeRect.height + 25) {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
-                        state.isPeeking = true
+                        state.isPeeking = false
                     }
                 }
-            } else if state.isPeeking && distanceFromTop > (activeRect.height + 25) {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
-                    state.isPeeking = false
-                }
-            }
-        } else if state.autoHideOnFullScreen && state.isFullScreenAppActive && !state.isExpanded && state.activeHUD == nil {
-            let distanceFromTop = screen.frame.maxY - location.y
-            let horizontalDistance = abs(location.x - screen.frame.midX)
-            
-            if distanceFromTop <= 8 && horizontalDistance <= 130 {
-                if !state.isPeeking {
+            } else if state.autoHideOnFullScreen && state.isFullScreenAppActive && !state.isExpanded && state.activeHUD == nil {
+                let distanceFromTop = screen.frame.maxY - location.y
+                let horizontalDistance = abs(location.x - screen.frame.midX)
+                
+                if distanceFromTop <= 8 && horizontalDistance <= 130 {
+                    if !state.isPeeking {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+                            state.isPeeking = true
+                        }
+                    }
+                } else if state.isPeeking && (distanceFromTop > (state.notchHeight + 25) || horizontalDistance > 160) {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
-                        state.isPeeking = true
+                        state.isPeeking = false
                     }
                 }
-            } else if state.isPeeking && (distanceFromTop > (state.notchHeight + 25) || horizontalDistance > 160) {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
-                    state.isPeeking = false
-                }
             }
-        }
-        
-        // File Drag toward notch triggers Shelf Tab
-        if isDragging {
-            let distanceFromTop = screen.frame.maxY - location.y
-            let horizontalDistance = abs(location.x - screen.frame.midX)
             
-            if distanceFromTop <= 50 && horizontalDistance <= 150 {
-                if !state.isExpanded {
-                    state.expand(tab: .shelf)
+            // File Drag toward notch triggers Shelf Tab
+            if isDragging {
+                let distanceFromTop = screen.frame.maxY - location.y
+                let horizontalDistance = abs(location.x - screen.frame.midX)
+                
+                if distanceFromTop <= 50 && horizontalDistance <= 150 {
+                    if !state.isExpanded {
+                        state.expand(tab: .shelf)
+                    }
                 }
             }
         }
