@@ -32,7 +32,7 @@ public struct NotchRootView: View {
     
     private var currentHeight: CGFloat {
         if isHiddenOrFullScreen { return 0 }
-        if state.isExpanded { return 240 }
+        if state.isExpanded { return 278 }
         if let hud = state.activeHUD {
             if hud.type == .battery {
                 return 52
