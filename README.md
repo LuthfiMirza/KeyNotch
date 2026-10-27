@@ -10,17 +10,23 @@ Designed as a zero-obstruction command center that blends hardware telemetry, me
 
 ### 🖥️ Core Notch & Display Engine
 1. **📱 MacBook Hardware Notch Design (Flush to Bezel):**
-   - **0-Pixel Gap**: Sits seamlessly flush against the top physical bezel of your display, mirroring Apple's authentic MacBook Pro notch cutout.
-   - Custom `NotchShape` geometry with flat top edge and fluid continuous squircle curvature at the bottom corners.
+   - **0-Pixel Gap & Tangential Concave Fillet**: Sits seamlessly flush against the top physical bezel of your display. Features mathematically continuous ($C^1$) cubic Bézier concave shoulders entering tangentially into the bezel without sharp creases or winged horns.
+   - Squircles with continuous curvature at the bottom corners.
    - Specular bottom and side rim outline while merging natively into the black screen bezel at the top.
 
-2. **👀 Smart Hover Peek Mode (Zero Screen Obstruction):**
+2. **🎬 Auto-Hide in Full Screen Apps:**
+   - Automatically hides the notch when an application enters macOS native Full Screen mode (e.g. YouTube, VLC, Netflix, full-screen games, or browser full-screen spaces) so videos and content remain 100% immersive.
+   - **Hover Reveal**: Move the cursor to the top screen edge to peek and access the island at any time.
+   - **HUD Toast Pass-Through**: Volume, Brightness, Charging, and Bluetooth HUD alerts smoothly slide down and auto-retract even in full-screen mode.
+   - Toggleable directly from the menu bar tray context menu.
+
+3. **👀 Smart Hover Peek Mode (Zero Screen Obstruction):**
    - Keeps your screen, window title bars, and browser tabs (Google Chrome, Safari, Arc) 100% clean and unobstructed.
    - In idle mode, tucks into a subtle micro-notch lip (`4px`) attached to the top bezel.
    - Moves down smoothly with iOS spring physics when you peek at the top ceiling of the screen, and auto-retracts when your cursor moves away.
    - Toggleable anytime via the menu bar icon (**Hover Peek Mode** vs **Always Visible**).
 
-3. **🖥️ Multi-Monitor & Virtual Notch Adaptive:**
+4. **🖥️ Multi-Monitor & Virtual Notch Adaptive:**
    - Automatically detects physical notch geometry on Apple Silicon MacBooks while gracefully rendering a virtual centered island on Intel MacBooks and external monitors (`NSScreen` dynamic geometry).
 
 ---
