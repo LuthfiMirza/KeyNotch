@@ -2,6 +2,7 @@ import SwiftUI
 
 public struct NotchRootView: View {
     @ObservedObject var state = IslandState.shared
+    @ObservedObject var lyrics = LyricsService.shared
     
     public init() {}
     
@@ -15,7 +16,9 @@ public struct NotchRootView: View {
     
     private var currentWidth: CGFloat {
         if isHiddenOrFullScreen { return 0 }
-        if state.isExpanded { return 520 }
+        if state.isExpanded {
+            return (state.selectedTab == .music && lyrics.isLyricsExpanded) ? 680 : 520
+        }
         if let hud = state.activeHUD {
             if hud.type == .battery {
                 return 370
@@ -120,6 +123,7 @@ public struct NotchRootView: View {
                 }
                 .frame(width: currentWidth, height: currentHeight)
                 .animation(.spring(response: 0.35, dampingFraction: 0.78), value: state.isExpanded)
+                .animation(.spring(response: 0.36, dampingFraction: 0.78), value: lyrics.isLyricsExpanded)
                 .animation(.spring(response: 0.35, dampingFraction: 0.78), value: state.isPeeking)
                 .animation(.spring(response: 0.38, dampingFraction: 0.72), value: state.activeHUD)
                 .animation(.spring(response: 0.35, dampingFraction: 0.78), value: state.shouldHideForFullScreen)
