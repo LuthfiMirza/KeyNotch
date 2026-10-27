@@ -50,7 +50,12 @@ Engineered with a **True Zero-Draw** architecture: WindowServer compositing cuts
    - Clean, unobtrusive floating pill notification whenever Caps Lock is turned On or Off.
    - Auto-dismisses after 1.4 seconds with fluid spring animation.
 
-8. **📊 Real-Time Mini System Stats (CPU & RAM Monitor):**
+8. **🎙️ Privacy Meeting Radar & Global Mic Mute:**
+   - Real-time CoreAudio monitoring (`AudioObjectAddPropertyListener`) that detects when any app (Google Meet, Zoom, Slack, browser calls) accesses the microphone.
+   - Shows an amber privacy dot/badge on the compact notch.
+   - **1-Click Global Mute**: Tap the mic badge in the notch or Control Center pill (or press `Option + Shift + M`) to instantly mute/unmute the system input device with animated HUD feedback.
+
+9. **📊 Real-Time Mini System Stats (CPU & RAM Monitor):**
    - Real-time Mach kernel hardware telemetry (`host_statistics64`) integrated into the Controls tab.
    - Live CPU load percentage and physical RAM usage meter (e.g., `5.2 GB / 16.0 GB`).
 
