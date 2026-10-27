@@ -135,9 +135,9 @@ public final class NotchWindowController: NSObject {
         if state.isExpanded {
             width = 520
             height = 240
-        } else if state.activeHUD != nil {
-            width = 280
-            height = 46
+        } else if let hud = state.activeHUD {
+            width = (hud.type == .battery || hud.type == .bluetooth) ? 340 : 280
+            height = (hud.type == .battery || hud.type == .bluetooth) ? 42 : 46
         } else if state.isHoverPeekMode {
             if state.isPeeking {
                 width = 210
