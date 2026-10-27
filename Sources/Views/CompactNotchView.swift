@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 public struct CompactNotchView: View {
     @ObservedObject var state = IslandState.shared
@@ -7,7 +8,14 @@ public struct CompactNotchView: View {
     @ObservedObject var pomodoro = PomodoroService.shared
     
     @State private var currentTime: String = ""
-    private let timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
+    @State private var clockTimer: AnyCancellable?
+    
+    // Cached static DateFormatter to eliminate heap allocation on ticks
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
     
     // Vibrant Activity Ring Green
     private let ringColor = Color(red: 0.18, green: 0.86, blue: 0.44)
@@ -49,7 +57,7 @@ public struct CompactNotchView: View {
             Spacer(minLength: 0)
             
             // MARK: - Center: Dead-Center Balanced Clock
-            Text(currentTime.isEmpty ? formattedCurrentTime() : currentTime)
+            Text(currentTime.isEmpty ? Self.timeFormatter.string(from: Date()) : currentTime)
                 .font(.system(size: 15, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
                 .monospacedDigit()
@@ -74,16 +82,35 @@ public struct CompactNotchView: View {
             state.toggleExpand()
         }
         .onAppear {
-            currentTime = formattedCurrentTime()
+            startMinuteSynchronizedClock()
         }
-        .onReceive(timer) { _ in
-            currentTime = formattedCurrentTime()
+        .onDisappear {
+            clockTimer?.cancel()
+            clockTimer = nil
         }
     }
     
-    private func formattedCurrentTime() -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
-        return formatter.string(from: Date())
+    /// Synchronizes clock ticks to minute boundaries, reducing wakeups from 60x/min to 1x/min
+    private func startMinuteSynchronizedClock() {
+        currentTime = Self.timeFormatter.string(from: Date())
+        
+        let now = Date()
+        let calendar = Calendar.current
+        let seconds = calendar.component(.second, from: now)
+        let nanoseconds = calendar.component(.nanosecond, from: now)
+        let delay = Double(60 - seconds) - (Double(nanoseconds) / 1_000_000_000.0) + 0.1
+        
+        clockTimer?.cancel()
+        clockTimer = Just(())
+            .delay(for: .seconds(max(0.5, delay)), scheduler: RunLoop.main)
+            .sink { [self] _ in
+                self.currentTime = Self.timeFormatter.string(from: Date())
+                // Repeat exactly once per minute with power-saving tolerance
+                self.clockTimer = Timer.publish(every: 60.0, tolerance: 0.5, on: .main, in: .common)
+                    .autoconnect()
+                    .sink { _ in
+                        self.currentTime = Self.timeFormatter.string(from: Date())
+                    }
+            }
     }
 }
