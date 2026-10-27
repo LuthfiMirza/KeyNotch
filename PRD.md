@@ -35,7 +35,7 @@ Build a super-lightweight (~2 MB binary, ~0.0% idle CPU), native macOS Dynamic I
 8. **Floating Caps Lock HUD**: `NSEvent.flagsChanged` monitor detecting `.capsLock` state toggles.
 9. **System Volume HUD**: Intercept or monitor media keys / system output volume (`AudioToolbox` / `NSSound`) to display sleek iOS volume capsule.
 10. **iOS Control Center**: Wi-Fi status + SSID (`CoreWLAN`), Bluetooth status, Focus indicator, and interactive volume capsule slider.
-11. **Clipboard History**: Track text/hex/URL strings from `NSPasteboard.general` (up to 15 items) with 1-click re-copy and checkmark feedback.
+11. **Plain-Text Sanitizer & Sequential Paste Queue**: Track copied snippets with zero CPU polling (Cmd+C/Cmd+X event monitor). Auto-sanitize rich-text and HTML formatting into pure text. Support multi-snippet staging via **Sequential Paste Queue (Stack)** with global hotkey `Option + Shift + V` to sequentially pop and prime each snippet into pasteboard.
 12. **File Shelf (Drag & Drop)**: Accept file URLs dragged to the top screen edge, store in temporary staging shelf, support dragging back out to any app.
 13. **Quick Action File Converter & OCR**: Inside File Shelf, provide 1-click buttons on staged images to Convert (`PNG`/`JPG`/`WebP`), Compress, or Copy OCR Text (`Vision`).
 14. **Quick Notes & Reminders**: Add/check/delete tasks persisted in `UserDefaults` with full keyboard focus inside `NSPanel`.
