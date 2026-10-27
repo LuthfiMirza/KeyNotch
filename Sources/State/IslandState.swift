@@ -77,14 +77,43 @@ public final class IslandState: ObservableObject {
     @Published public var selectedTab: IslandTab = .controls
     @Published public var activeHUD: HUDPayload? = nil
     
-    // Notch Dimensions (Calculated or Dynamic)
+    // Notch Dimensions & Hardware Awareness
+    @Published public var hasPhysicalNotch: Bool = false
     @Published public var notchWidth: CGFloat = 210
-    @Published public var notchHeight: CGFloat = 32
+    @Published public var notchHeight: CGFloat = 36
     
     private var hudDismissTimer: AnyCancellable?
     
     private init() {
         self.isHoverPeekMode = UserDefaults.standard.bool(forKey: "isHoverPeekMode")
+        updateScreenMetrics()
+    }
+    
+    public func updateScreenMetrics() {
+        guard let screen = NSScreen.main else { return }
+        
+        var hasNotch = false
+        var height: CGFloat = 36
+        var width: CGFloat = 210
+        
+        if #available(macOS 12.0, *) {
+            let topInset = screen.safeAreaInsets.top
+            if topInset > 0 {
+                hasNotch = true
+                height = max(32, topInset)
+            }
+            if let leftAux = screen.auxiliaryTopLeftArea, let rightAux = screen.auxiliaryTopRightArea {
+                hasNotch = true
+                let gap = rightAux.minX - leftAux.maxX
+                if gap > 100 {
+                    width = gap
+                }
+            }
+        }
+        
+        self.hasPhysicalNotch = hasNotch
+        self.notchHeight = hasNotch ? height : 36
+        self.notchWidth = hasNotch ? width : 210
     }
     
     // MARK: - Actions
