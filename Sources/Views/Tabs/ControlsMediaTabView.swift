@@ -10,6 +10,7 @@ public struct ControlsMediaTabView: View {
     @ObservedObject var devTools = DevToolsService.shared
     @ObservedObject var mic = MicrophoneService.shared
     @ObservedObject var network = NetworkMonitorService.shared
+    @ObservedObject var brightness = BrightnessService.shared
     
     @State private var wifiName: String = "Wi-Fi"
     @State private var isFocusActive: Bool = false
@@ -27,122 +28,221 @@ public struct ControlsMediaTabView: View {
     public init() {}
     
     public var body: some View {
-        VStack(spacing: 8) {
-            // MARK: - 1. Universal Now Playing Card
-            mediaPlayerCard
+        VStack(spacing: 10) {
+            // MARK: - 1. Dual Sliders: Display Brightness & Sound Volume
+            slidersSection
             
-            // MARK: - 2. Mach Kernel System Stats & Battery Strip
+            // MARK: - 2. Quick Toggles Matrix (Wi-Fi, Bluetooth, Mute, Caffeinate, Focus)
+            quickTogglesSection
+            
+            // MARK: - 3. Mini Now Playing Shortcut (if active)
+            if media.hasActiveMedia || !media.title.isEmpty {
+                nowPlayingShortcutBar
+            }
+            
+            // MARK: - 4. Mach Kernel System Stats & Battery Strip
             systemTelemetryStrip
             
-            // MARK: - 3. iOS Control Center Quick Toggles & Volume Slider
-            controlCenterSection
-            
-            // MARK: - 4. Dev Tools Strip (Ports & Native Color Picker)
+            // MARK: - 5. Dev Tools Strip (Ports & Native Color Picker)
             devToolsStrip
         }
         .padding(.horizontal, 14)
-        .padding(.top, 2)
+        .padding(.top, 4)
         .onAppear {
             refreshWiFi()
-            media.refreshNowPlaying()
+            brightness.readCurrentBrightness()
             devTools.scanActivePorts()
         }
     }
     
-    // MARK: - Media Player Card
+    // MARK: - 1. Dual Sliders (Display Brightness & Sound Volume)
     
-    private var mediaPlayerCard: some View {
-        HStack(spacing: 12) {
-            // Album Artwork
-            ZStack {
-                if let artwork = media.artwork {
-                    Image(nsImage: artwork)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: 44, height: 44)
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                } else {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.white.opacity(0.08))
-                        .frame(width: 44, height: 44)
-                    
-                    Image(systemName: "music.note")
-                        .font(.system(size: 18))
-                        .foregroundColor(.white.opacity(0.6))
-                }
-            }
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(Color.white.opacity(0.12), lineWidth: 0.5)
-            )
-            
-            // Track Info & Animated Waveform
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(media.title.isEmpty ? "No Media Playing" : media.title)
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.white)
-                        .lineLimit(1)
-                    
-                    if media.isPlaying {
-                        WaveformView(isPlaying: true, color: .green, barCount: 4, maxHeight: 10)
-                    }
-                }
-                
-                Text(media.artist.isEmpty ? "Audio playback will appear here" : media.artist)
-                    .font(.system(size: 10, weight: .regular))
-                    .foregroundColor(.white.opacity(0.65))
-                    .lineLimit(1)
+    private var slidersSection: some View {
+        HStack(spacing: 8) {
+            // Display Brightness Slider
+            CapsuleSliderView(
+                value: Binding(
+                    get: { brightness.currentBrightness },
+                    set: { brightness.setBrightness($0) }
+                ),
+                iconName: "sun.max.fill"
+            ) { newBrightness in
+                brightness.setBrightness(newBrightness)
             }
             
-            Spacer(minLength: 8)
-            
-            // Playback Controls
-            HStack(spacing: 8) {
-                // Previous
-                Button(action: {
-                    media.previousTrack()
-                }) {
-                    Image(systemName: "backward.fill")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.white.opacity(0.75))
-                        .frame(width: 24, height: 24)
-                }
-                .buttonStyle(PlainButtonStyle())
-                
-                // Play / Pause
-                Button(action: {
-                    media.togglePlayPause()
-                }) {
-                    ZStack {
-                        Circle()
-                            .fill(Color.white)
-                            .frame(width: 28, height: 28)
-                        
-                        Image(systemName: media.isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(.black)
-                    }
-                }
-                .buttonStyle(PlainButtonStyle())
-                
-                // Next
-                Button(action: {
-                    media.nextTrack()
-                }) {
-                    Image(systemName: "forward.fill")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.white.opacity(0.75))
-                        .frame(width: 24, height: 24)
-                }
-                .buttonStyle(PlainButtonStyle())
+            // Sound Volume Slider
+            CapsuleSliderView(
+                value: Binding(
+                    get: { hud.currentVolume },
+                    set: { hud.setSystemVolume($0) }
+                ),
+                iconName: "speaker.wave.3.fill"
+            ) { newVolume in
+                hud.setSystemVolume(newVolume)
             }
         }
-        .padding(8)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.white.opacity(0.06))
-        )
+    }
+    
+    // MARK: - 2. Quick Toggles Matrix (Wi-Fi, Bluetooth, Mute, Caffeinate, Focus)
+    
+    private var quickTogglesSection: some View {
+        HStack(spacing: 6) {
+            // Wi-Fi Button
+            Button(action: {
+                refreshWiFi()
+            }) {
+                HStack(spacing: 5) {
+                    Image(systemName: "wifi")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(.blue)
+                    
+                    Text(wifiName)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(Color.white.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            .buttonStyle(PlainButtonStyle())
+            
+            // Bluetooth Button
+            Button(action: {
+                isBluetoothOn.toggle()
+            }) {
+                HStack(spacing: 5) {
+                    Image(systemName: "wave.3.forward")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(isBluetoothOn ? .blue : .gray)
+                    
+                    Text(isBluetoothOn ? "Bluetooth On" : "Bluetooth Off")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(Color.white.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            .buttonStyle(PlainButtonStyle())
+            
+            // Microphone Privacy & Global Mute Button
+            Button(action: {
+                mic.toggleMute()
+            }) {
+                HStack(spacing: 5) {
+                    Image(systemName: mic.isMuted ? "mic.slash.fill" : (mic.isMicInUse ? "mic.fill" : "mic"))
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(mic.isMuted ? .red : (mic.isMicInUse ? .orange : .white.opacity(0.6)))
+                    
+                    Text(mic.isMuted ? "Muted" : (mic.isMicInUse ? "Mic Live" : "Mic On"))
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(
+                    mic.isMuted
+                    ? Color.red.opacity(0.22)
+                    : (mic.isMicInUse ? Color.orange.opacity(0.22) : Color.white.opacity(0.08))
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            .buttonStyle(PlainButtonStyle())
+            
+            // Caffeinate Toggle Button
+            Button(action: {
+                caffeinate.toggle()
+            }) {
+                HStack(spacing: 5) {
+                    Image(systemName: caffeinate.isCaffeinated ? "cup.and.saucer.fill" : "cup.and.saucer")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(caffeinate.isCaffeinated ? .orange : .white.opacity(0.6))
+                    
+                    Text(caffeinate.isCaffeinated ? "Awake" : "Caffeinate")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.white)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(
+                    caffeinate.isCaffeinated
+                    ? Color.orange.opacity(0.25)
+                    : Color.white.opacity(0.08)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            .buttonStyle(PlainButtonStyle())
+            
+            // Focus / DND Button
+            Button(action: {
+                isFocusActive.toggle()
+            }) {
+                HStack(spacing: 5) {
+                    Image(systemName: isFocusActive ? "moon.fill" : "moon")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(isFocusActive ? .indigo : .white.opacity(0.6))
+                    
+                    Text(isFocusActive ? "Focus On" : "Focus")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.white)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(
+                    isFocusActive
+                    ? Color.indigo.opacity(0.25)
+                    : Color.white.opacity(0.08)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            .buttonStyle(PlainButtonStyle())
+        }
+    }
+    
+    // MARK: - 3. Mini Now Playing Shortcut Bar
+    
+    private var nowPlayingShortcutBar: some View {
+        Button(action: {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                IslandState.shared.selectedTab = .music
+            }
+        }) {
+            HStack(spacing: 8) {
+                Image(systemName: "music.note")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.green)
+                
+                Text(media.title + (media.artist.isEmpty ? "" : " · \(media.artist)"))
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.9))
+                    .lineLimit(1)
+                
+                Spacer()
+                
+                if media.isPlaying {
+                    WaveformView(isPlaying: true, color: .green, barCount: 4, maxHeight: 9)
+                }
+                
+                Text("Open Player →")
+                    .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                    .foregroundColor(.white.opacity(0.55))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Color.white.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(PlainButtonStyle())
     }
     
     // MARK: - System Telemetry Strip
@@ -246,144 +346,7 @@ public struct ControlsMediaTabView: View {
         }
     }
     
-    // MARK: - Control Center Grid & Volume Slider
-    
-    private var controlCenterSection: some View {
-        VStack(spacing: 6) {
-            // Grid of 4 Control Center Pills
-            HStack(spacing: 6) {
-                // Wi-Fi Button
-                Button(action: {
-                    refreshWiFi()
-                }) {
-                    HStack(spacing: 5) {
-                        Image(systemName: "wifi")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundColor(.blue)
-                        
-                        Text(wifiName)
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(.white)
-                            .lineLimit(1)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .background(Color.white.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                }
-                .buttonStyle(PlainButtonStyle())
-                
-                // Bluetooth Button
-                Button(action: {
-                    isBluetoothOn.toggle()
-                }) {
-                    HStack(spacing: 5) {
-                        Image(systemName: "wave.3.forward")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundColor(isBluetoothOn ? .blue : .gray)
-                        
-                        Text(isBluetoothOn ? "Bluetooth On" : "Bluetooth Off")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(.white)
-                            .lineLimit(1)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .background(Color.white.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                }
-                .buttonStyle(PlainButtonStyle())
-                
-                // Microphone Privacy & Global Mute Button
-                Button(action: {
-                    mic.toggleMute()
-                }) {
-                    HStack(spacing: 5) {
-                        Image(systemName: mic.isMuted ? "mic.slash.fill" : (mic.isMicInUse ? "mic.fill" : "mic"))
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundColor(mic.isMuted ? .red : (mic.isMicInUse ? .orange : .white.opacity(0.6)))
-                        
-                        Text(mic.isMuted ? "Muted" : (mic.isMicInUse ? "Mic Live" : "Mic On"))
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(.white)
-                            .lineLimit(1)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .background(
-                        mic.isMuted
-                        ? Color.red.opacity(0.22)
-                        : (mic.isMicInUse ? Color.orange.opacity(0.22) : Color.white.opacity(0.08))
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                }
-                .buttonStyle(PlainButtonStyle())
-                
-                // Caffeinate Toggle Button
-                Button(action: {
-                    caffeinate.toggle()
-                }) {
-                    HStack(spacing: 5) {
-                        Image(systemName: caffeinate.isCaffeinated ? "cup.and.saucer.fill" : "cup.and.saucer")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundColor(caffeinate.isCaffeinated ? .orange : .white.opacity(0.6))
-                        
-                        Text(caffeinate.isCaffeinated ? "Awake" : "Caffeinate")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(.white)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .background(
-                        caffeinate.isCaffeinated
-                        ? Color.orange.opacity(0.25)
-                        : Color.white.opacity(0.08)
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                }
-                .buttonStyle(PlainButtonStyle())
-                
-                // Focus / DND Button
-                Button(action: {
-                    isFocusActive.toggle()
-                }) {
-                    HStack(spacing: 5) {
-                        Image(systemName: isFocusActive ? "moon.fill" : "moon")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundColor(isFocusActive ? .indigo : .white.opacity(0.6))
-                        
-                        Text(isFocusActive ? "Focus On" : "Focus")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(.white)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .background(
-                        isFocusActive
-                        ? Color.indigo.opacity(0.25)
-                        : Color.white.opacity(0.08)
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                }
-                .buttonStyle(PlainButtonStyle())
-            }
-            
-            // Interactive iOS Volume Capsule Slider
-            CapsuleSliderView(
-                value: Binding(
-                    get: { hud.currentVolume },
-                    set: { hud.setSystemVolume($0) }
-                )
-            ) { newVolume in
-                hud.setSystemVolume(newVolume)
-            }
-        }
-    }
+
     
     // MARK: - Dev Tools Strip (Color Picker & Active Ports)
     
