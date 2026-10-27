@@ -69,17 +69,23 @@ Engineered with a **True Zero-Draw** architecture: WindowServer compositing cuts
 10. **⚡ Instant Drop-Zone Actions (Image & File Converter):**
     - Built-in quick action pills inside the File Shelf: one-click image compression, instant format conversion (`PNG` ⇄ `WebP` / `JPG`), and quick text extraction (OCR) via macOS native `Vision.framework`.
 
-11. **📋 Quick Clipboard History (Shelf Tab):**
-    - Built-in clipboard manager seamlessly integrated into the Shelf tab (`Files Shelf` | `Clipboard`).
-    - Automatically records copied text snippets, URLs, and Hex color codes without polling overhead.
-    - Single-click to re-copy any previous snippet back to your pasteboard with instant visual checkmark feedback.
+11. **📋 Plain-Text Sanitizer & Clipboard History:**
+    - Built-in clipboard manager seamlessly integrated into the Shelf tab (`Files Shelf` | `Clipboard` | `Paste Queue`).
+    - **Plain-Text Cleaner Toggle**: Automatically strips messy rich-text fonts, colors, and HTML background formatting from copied text, keeping your pasted text native to your destination.
+    - Records copied text snippets, URLs, and Hex color codes without polling overhead (zero-CPU event monitor).
+    - Single-click to re-copy any snippet with instant visual checkmark feedback.
 
-12. **📝 Quick Notes & Reminders:**
+12. **🔢 Sequential Paste Queue (Stack) & Global Hotkey (`Option + Shift + V`):**
+    - Click **"+ Queue"** on any snippet to stage them into an ordered paste list.
+    - Press **`Option + Shift + V`** anywhere across macOS to sequentially pop the next snippet, copy it to the system pasteboard, and trigger a sleek HUD capsule displaying remaining items (`3 left`, `2 left`, `Done!`).
+    - Perfect for transferring multi-column forms, spreadsheets, credentials, and data entry workflows in seconds without app switching.
+
+13. **📝 Quick Notes & Reminders:**
     - Instant task entry with a dedicated **"Add"** button or pressing `Enter` with full keyboard focus inside floating panels.
     - Interactive iOS Reminders-style circular checkboxes with strikethrough animations.
     - Persistent local storage using `UserDefaults`.
 
-13. **⏱️ Focus / Pomodoro Timer:**
+14. **⏱️ Focus / Pomodoro Timer:**
     - Digital countdown with **SF Pro Rounded** typography and persistent compact progress ring on the notch edge.
     - Instant presets: 25 minutes (Pomodoro), 5 minutes (Short Break), 15 minutes (Long Break).
 
@@ -98,11 +104,14 @@ Engineered with a **True Zero-Draw** architecture: WindowServer compositing cuts
     - **Caffeinate Toggle**: One-click native power management assertion (`IOPMAssertionCreateWithName`) to keep your Mac awake during builds, renders, or downloads.
     - Quick status and toggles for **Wi-Fi** (with SSID detection), **Bluetooth**, **Focus / DND**, and an interactive iOS capsule volume scrubber.
 
-17. **⌨️ Global Keyboard Shortcut (`Option + Space`) & Smart Pass-Through:**
-    - Toggle expand/collapse instantly from anywhere across macOS using Carbon `RegisterEventHotKey` without invasive accessibility permissions.
+17. **⌨️ Global Keyboard Shortcuts (Zero Accessibility Permissions):**
+    - `Option + Space`: Toggle Expand / Collapse Dynamic Island instantly.
+    - `Option + Shift + V`: Paste Next Snippet in Sequential Queue with HUD indicator.
+    - `Option + Shift + M`: 1-Click Global Microphone Mute / Unmute.
+    - `Option + Shift + C`: Instant Screen Color Picker Loupe.
     - **Dead-Center Balanced Clock**: Mathematically and optically aligned time indicator.
     - **Smart Click Pass-Through**: Transparent areas around the notch let mouse clicks pass straight through to underlying windows.
-    - **Menu Bar Tray Icon (🏝️)**: Left-click to toggle Island; Right-click for quick preferences (**Hover Peek Mode**, Hide Island, Quit).
+    - **Menu Bar Tray Icon (🏝️)**: Left-click to toggle Island; Right-click for quick preferences (**Hover Peek Mode**, Full-Screen Auto-Hide, Clean Plain-Text Sanitizer, Quit).
 
 ---
 
@@ -110,7 +119,7 @@ Engineered with a **True Zero-Draw** architecture: WindowServer compositing cuts
 
 - **Operating System**: macOS 12 Monterey or later (Ventura, Sonoma, Sequoia supported).
 - **Architecture**: Universal — Intel (`x86_64`) & Apple Silicon (`arm64`).
-- **Binary Footprint**: Standalone **~2.0 MB** (Zero third-party dependencies / No Electron / Pure Native).
+- **Binary Footprint**: Standalone **~824 KB** (Zero third-party dependencies / No Electron / Pure Native).
 - **Toolchain**: Apple Command Line Tools (`xcode-select --install`).
 
 ---
