@@ -189,7 +189,7 @@ public final class NotchWindowController: NSObject {
             let distanceFromTop = screen.frame.maxY - location.y
             let horizontalDistance = abs(location.x - screen.frame.midX)
             
-            if distanceFromTop <= 4 && horizontalDistance <= 120 {
+            if distanceFromTop <= 8 && horizontalDistance <= 130 {
                 if !state.isPeeking {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
                         state.isPeeking = true
