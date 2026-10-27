@@ -19,19 +19,47 @@ public final class MediaRemoteService: ObservableObject {
     private typealias MRGetInfoFunction = @convention(c) (DispatchQueue, @escaping (CFDictionary?) -> Void) -> Void
     private typealias MRIsPlayingFunction = @convention(c) (DispatchQueue, @escaping (DarwinBoolean) -> Void) -> Void
     private typealias MRSendCommandFunction = @convention(c) (Int, CFDictionary?) -> DarwinBoolean
+    private typealias MRSetElapsedFunction = @convention(c) (Double) -> Void
     
     private var mrGetInfo: MRGetInfoFunction?
     private var mrIsPlaying: MRIsPlayingFunction?
     private var mrSendCommand: MRSendCommandFunction?
+    private var mrSetElapsedTime: MRSetElapsedFunction?
     private var handle: UnsafeMutableRawPointer?
+    private var cancellables = Set<AnyCancellable>()
     
-    // Polling fallback timer (only active when expanded or playing)
+    // Helper Process (MediaBridge via /usr/bin/swift)
+    private var bridgeProcess: Process?
+    
+    // Polling timer (active when expanded or playing)
     private var fallbackTimer: Timer?
     
     private init() {
         loadMediaRemote()
+        startMediaBridgeIfNeeded()
         setupNotificationObservers()
+        setupStateObservers()
         refreshNowPlaying()
+    }
+    
+    // MARK: - MediaBridge Process Management
+    
+    private func startMediaBridgeIfNeeded() {
+        guard bridgeProcess == nil || !bridgeProcess!.isRunning else { return }
+        
+        let bundlePath = Bundle.main.path(forResource: "MediaBridge", ofType: "swift")
+        let localPath = "/Users/mac/KeyNotch/Resources/MediaBridge.swift"
+        let scriptPath = (bundlePath != nil && FileManager.default.fileExists(atPath: bundlePath!)) ? bundlePath! : localPath
+        
+        guard FileManager.default.fileExists(atPath: scriptPath) else { return }
+        
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/swift")
+        p.arguments = [scriptPath]
+        p.standardOutput = Pipe()
+        p.standardError = Pipe()
+        try? p.run()
+        bridgeProcess = p
     }
     
     private func loadMediaRemote() {
@@ -57,9 +85,48 @@ public final class MediaRemoteService: ObservableObject {
         if let sendCommandSym = dlsym(handle, "MRMediaRemoteSendCommand") {
             mrSendCommand = unsafeBitCast(sendCommandSym, to: MRSendCommandFunction.self)
         }
+        
+        if let setElapsedSym = dlsym(handle, "MRMediaRemoteSetElapsedTime") {
+            mrSetElapsedTime = unsafeBitCast(setElapsedSym, to: MRSetElapsedFunction.self)
+        }
+    }
+    
+    private func setupStateObservers() {
+        IslandState.shared.$isExpanded
+            .receive(on: RunLoop.main)
+            .sink { [weak self] expanded in
+                guard let self = self else { return }
+                if expanded {
+                    self.startTimer()
+                    self.refreshNowPlaying()
+                } else if !self.isPlaying {
+                    self.stopTimer()
+                }
+            }
+            .store(in: &cancellables)
+    }
+    
+    public func startTimer() {
+        guard fallbackTimer == nil else { return }
+        fallbackTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            self?.refreshNowPlaying()
+        }
+    }
+    
+    public func stopTimer() {
+        fallbackTimer?.invalidate()
+        fallbackTimer = nil
     }
     
     private func setupNotificationObservers() {
+        let dnc = DistributedNotificationCenter.default()
+        dnc.addObserver(
+            self,
+            selector: #selector(handleBridgeMediaUpdated),
+            name: NSNotification.Name("com.keynotch.mediaUpdated"),
+            object: nil
+        )
+        
         let nc = NotificationCenter.default
         nc.addObserver(
             self,
@@ -81,65 +148,78 @@ public final class MediaRemoteService: ObservableObject {
         )
     }
     
+    @objc private func handleBridgeMediaUpdated() {
+        readBridgePayload()
+    }
+    
     @objc private func handleMediaChange() {
-        DispatchQueue.main.async { [weak self] in
-            self?.refreshNowPlaying()
-        }
+        refreshNowPlaying()
     }
     
     public func refreshNowPlaying() {
-        if let mrIsPlaying = mrIsPlaying {
-            mrIsPlaying(DispatchQueue.main) { [weak self] playing in
-                DispatchQueue.main.async {
-                    self?.isPlaying = playing.boolValue
-                }
-            }
-        }
+        startMediaBridgeIfNeeded()
+        readBridgePayload()
         
-        if let mrGetInfo = mrGetInfo {
-            mrGetInfo(DispatchQueue.main) { [weak self] dict in
-                guard let self = self else { return }
-                DispatchQueue.main.async {
-                    if let dict = dict as? [String: Any], !dict.isEmpty {
-                        self.parseMediaDictionary(dict)
-                    } else {
-                        // MediaRemote empty, try AppleScript fallback for Spotify / Apple Music
-                        self.fallbackAppleScriptCheck()
-                    }
-                }
-            }
-        } else {
-            fallbackAppleScriptCheck()
-        }
+        DistributedNotificationCenter.default().postNotificationName(
+            NSNotification.Name("com.keynotch.command.requestSync"),
+            object: nil,
+            userInfo: nil,
+            deliverImmediately: true
+        )
     }
     
-    private func parseMediaDictionary(_ dict: [String: Any]) {
-        let newTitle = dict["kMRMediaRemoteNowPlayingInfoTitle"] as? String ?? ""
-        let newArtist = dict["kMRMediaRemoteNowPlayingInfoArtist"] as? String ?? ""
-        let newAlbum = dict["kMRMediaRemoteNowPlayingInfoAlbum"] as? String ?? ""
-        let newDuration = dict["kMRMediaRemoteNowPlayingInfoDuration"] as? Double ?? 0
-        let newElapsed = dict["kMRMediaRemoteNowPlayingInfoElapsedTime"] as? Double ?? 0
-        
-        var newArtwork: NSImage? = nil
-        if let artData = dict["kMRMediaRemoteNowPlayingInfoArtworkData"] as? Data {
-            newArtwork = NSImage(data: artData)
+    private func readBridgePayload() {
+        let jsonPath = "/tmp/keynotch_media.json"
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: jsonPath)),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            fallbackAppleScriptCheck()
+            return
         }
         
-        if !newTitle.isEmpty {
-            self.title = newTitle
-            self.artist = newArtist.isEmpty ? "Unknown Artist" : newArtist
-            self.album = newAlbum
-            self.duration = newDuration
-            self.elapsedTime = newElapsed
-            self.hasActiveMedia = true
-            if let newArtwork = newArtwork {
-                self.artwork = newArtwork
+        let newTitle = json["title"] as? String ?? ""
+        let newArtist = json["artist"] as? String ?? ""
+        let newAlbum = json["album"] as? String ?? ""
+        let newDuration = json["duration"] as? Double ?? 0
+        let newElapsed = json["elapsedTime"] as? Double ?? 0
+        let newIsPlaying = json["isPlaying"] as? Bool ?? false
+        let artworkPath = json["artworkPath"] as? String ?? ""
+        
+        var newArtwork: NSImage? = nil
+        if !artworkPath.isEmpty && FileManager.default.fileExists(atPath: artworkPath) {
+            newArtwork = NSImage(contentsOfFile: artworkPath)
+        }
+        
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            let titleChanged = (self.title != newTitle || self.artist != newArtist)
+            
+            if !newTitle.isEmpty {
+                self.title = newTitle
+                self.artist = newArtist.isEmpty ? "Unknown Artist" : newArtist
+                self.album = newAlbum
+                self.duration = newDuration
+                self.elapsedTime = newElapsed
+                self.isPlaying = newIsPlaying
+                self.hasActiveMedia = true
+                if let newArtwork = newArtwork {
+                    self.artwork = newArtwork
+                }
+                
+                if newIsPlaying && self.fallbackTimer == nil {
+                    self.startTimer()
+                } else if !newIsPlaying && !IslandState.shared.isExpanded {
+                    self.stopTimer()
+                }
+                
+                if titleChanged {
+                    LyricsService.shared.fetchLyrics(
+                        title: newTitle,
+                        artist: newArtist
+                    )
+                }
+            } else {
+                self.fallbackAppleScriptCheck()
             }
-        } else {
-            self.hasActiveMedia = false
-            self.isPlaying = false
-            self.artwork = nil
-            fallbackAppleScriptCheck()
         }
     }
     
@@ -190,32 +270,61 @@ public final class MediaRemoteService: ObservableObject {
     }
     
     private func runMediaScript(_ scriptText: String, defaultArtist: String) {
-        DispatchQueue.global(qos: .utility).async { [weak self] in
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
             var error: NSDictionary?
             if let script = NSAppleScript(source: scriptText),
-               let descriptor = script.executeAndReturnError(&error).stringValue {
-                let parts = descriptor.components(separatedBy: "|||")
-                if parts.count >= 6 && !parts[0].isEmpty {
-                    DispatchQueue.main.async {
-                        self?.title = parts[0]
-                        self?.artist = parts[1].isEmpty ? defaultArtist : parts[1]
-                        self?.album = parts[2]
-                        if let durMs = Double(parts[3]) {
-                            // Spotify returns duration in ms, Music in seconds
-                            self?.duration = durMs > 1000 ? durMs / 1000.0 : durMs
+               let result = script.executeAndReturnError(&error).stringValue,
+               !result.isEmpty {
+                let parts = result.components(separatedBy: "|||")
+                if parts.count >= 6 {
+                    let songTitle = parts[0]
+                    let songArtist = parts[1].isEmpty ? defaultArtist : parts[1]
+                    let songAlbum = parts[2]
+                    let songDuration = (Double(parts[3]) ?? 0) / 1000.0
+                    let songElapsed = Double(parts[4]) ?? 0
+                    let songState = parts[5]
+                    let playing = (songState == "playing")
+                    
+                    if !songTitle.isEmpty {
+                        DispatchQueue.main.async {
+                            let titleChanged = (self.title != songTitle || self.artist != songArtist)
+                            self.title = songTitle
+                            self.artist = songArtist
+                            self.album = songAlbum
+                            self.duration = songDuration
+                            self.elapsedTime = songElapsed
+                            self.isPlaying = playing
+                            self.hasActiveMedia = true
+                            
+                            if playing && self.fallbackTimer == nil {
+                                self.startTimer()
+                            } else if !playing && !IslandState.shared.isExpanded {
+                                self.stopTimer()
+                            }
+                            
+                            if titleChanged {
+                                LyricsService.shared.fetchLyrics(
+                                    title: songTitle,
+                                    artist: songArtist
+                                )
+                            }
                         }
-                        self?.elapsedTime = Double(parts[4]) ?? 0
-                        self?.isPlaying = parts[5] == "playing"
-                        self?.hasActiveMedia = true
                     }
                 }
             }
         }
     }
     
-    // MARK: - Playback Controls
+    // MARK: - Native Playback Controls (MediaRemote + Bridge + AppleScript Fallback)
     
     public func togglePlayPause() {
+        DistributedNotificationCenter.default().postNotificationName(
+            NSNotification.Name("com.keynotch.command.playPause"),
+            object: nil,
+            userInfo: nil,
+            deliverImmediately: true
+        )
         if let mrSendCommand = mrSendCommand {
             _ = mrSendCommand(2, nil) // 2 = TogglePlayPause
         } else {
@@ -225,6 +334,12 @@ public final class MediaRemoteService: ObservableObject {
     }
     
     public func play() {
+        DistributedNotificationCenter.default().postNotificationName(
+            NSNotification.Name("com.keynotch.command.playPause"),
+            object: nil,
+            userInfo: nil,
+            deliverImmediately: true
+        )
         if let mrSendCommand = mrSendCommand {
             _ = mrSendCommand(0, nil) // 0 = Play
         } else {
@@ -234,6 +349,12 @@ public final class MediaRemoteService: ObservableObject {
     }
     
     public func pause() {
+        DistributedNotificationCenter.default().postNotificationName(
+            NSNotification.Name("com.keynotch.command.playPause"),
+            object: nil,
+            userInfo: nil,
+            deliverImmediately: true
+        )
         if let mrSendCommand = mrSendCommand {
             _ = mrSendCommand(1, nil) // 1 = Pause
         } else {
@@ -243,6 +364,12 @@ public final class MediaRemoteService: ObservableObject {
     }
     
     public func nextTrack() {
+        DistributedNotificationCenter.default().postNotificationName(
+            NSNotification.Name("com.keynotch.command.next"),
+            object: nil,
+            userInfo: nil,
+            deliverImmediately: true
+        )
         if let mrSendCommand = mrSendCommand {
             _ = mrSendCommand(4, nil) // 4 = NextTrack
         } else {
@@ -254,6 +381,12 @@ public final class MediaRemoteService: ObservableObject {
     }
     
     public func previousTrack() {
+        DistributedNotificationCenter.default().postNotificationName(
+            NSNotification.Name("com.keynotch.command.previous"),
+            object: nil,
+            userInfo: nil,
+            deliverImmediately: true
+        )
         if let mrSendCommand = mrSendCommand {
             _ = mrSendCommand(5, nil) // 5 = PreviousTrack
         } else {
@@ -266,12 +399,29 @@ public final class MediaRemoteService: ObservableObject {
     
     public func seek(to seconds: Double) {
         elapsedTime = seconds
+        DistributedNotificationCenter.default().postNotificationName(
+            NSNotification.Name("com.keynotch.command.seek"),
+            object: nil,
+            userInfo: ["seconds": "\(seconds)"],
+            deliverImmediately: true
+        )
+        if let mrSetElapsedTime = mrSetElapsedTime {
+            mrSetElapsedTime(seconds)
+        }
         let isSpotifyRunning = !NSRunningApplication.runningApplications(withBundleIdentifier: "com.spotify.client").isEmpty
-        let target = isSpotifyRunning ? "Spotify" : "Music"
-        let script = "tell application \"\(target)\" to set player position to \(seconds)"
-        DispatchQueue.global(qos: .userInitiated).async {
-            var error: NSDictionary?
-            NSAppleScript(source: script)?.executeAndReturnError(&error)
+        let isMusicRunning = !NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Music").isEmpty
+        if isSpotifyRunning {
+            let script = "tell application \"Spotify\" to set player position to \(seconds)"
+            DispatchQueue.global(qos: .userInitiated).async {
+                var error: NSDictionary?
+                NSAppleScript(source: script)?.executeAndReturnError(&error)
+            }
+        } else if isMusicRunning {
+            let script = "tell application \"Music\" to set player position to \(seconds)"
+            DispatchQueue.global(qos: .userInitiated).async {
+                var error: NSDictionary?
+                NSAppleScript(source: script)?.executeAndReturnError(&error)
+            }
         }
     }
     
@@ -287,6 +437,9 @@ public final class MediaRemoteService: ObservableObject {
     
     deinit {
         NotificationCenter.default.removeObserver(self)
+        DistributedNotificationCenter.default().removeObserver(self)
+        bridgeProcess?.terminate()
+        bridgeProcess = nil
         if let handle = handle {
             dlclose(handle)
         }
