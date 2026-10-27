@@ -197,7 +197,7 @@ public final class IslandState: ObservableObject {
         guard !isExpanded else { return }
         
         hudDismissTimer?.cancel()
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.75)) {
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.72)) {
             activeHUD = payload
         }
         
