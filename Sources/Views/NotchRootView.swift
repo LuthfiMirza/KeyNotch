@@ -17,8 +17,10 @@ public struct NotchRootView: View {
         if isHiddenOrFullScreen { return 0 }
         if state.isExpanded { return 520 }
         if let hud = state.activeHUD {
-            if hud.type == .battery || hud.type == .bluetooth {
-                return 340
+            if hud.type == .battery {
+                return 370
+            } else if hud.type == .bluetooth {
+                return 360
             }
             return 280
         }
@@ -32,7 +34,12 @@ public struct NotchRootView: View {
         if isHiddenOrFullScreen { return 0 }
         if state.isExpanded { return 240 }
         if let hud = state.activeHUD {
-            return (hud.type == .battery || hud.type == .bluetooth) ? 42 : 46
+            if hud.type == .battery {
+                return 52
+            } else if hud.type == .bluetooth {
+                return 48
+            }
+            return 46
         }
         if state.isHoverPeekMode {
             return state.isPeeking ? state.notchHeight : 4
@@ -43,7 +50,12 @@ public struct NotchRootView: View {
     private var currentCornerRadius: CGFloat {
         if state.isExpanded { return 24 }
         if let hud = state.activeHUD {
-            return (hud.type == .battery || hud.type == .bluetooth) ? 21 : 20
+            if hud.type == .battery {
+                return 22
+            } else if hud.type == .bluetooth {
+                return 21
+            }
+            return 20
         }
         if isMicroLip { return 2 }
         return 18
@@ -52,7 +64,14 @@ public struct NotchRootView: View {
     private var currentShoulderRadius: CGFloat {
         if isMicroLip { return 0 }
         if state.isExpanded { return 9 }
-        if state.activeHUD != nil { return 7 }
+        if let hud = state.activeHUD {
+            if hud.type == .battery {
+                return 8
+            } else if hud.type == .bluetooth {
+                return 7.5
+            }
+            return 7
+        }
         return 7
     }
     
@@ -102,7 +121,7 @@ public struct NotchRootView: View {
                 .frame(width: currentWidth, height: currentHeight)
                 .animation(.spring(response: 0.35, dampingFraction: 0.78), value: state.isExpanded)
                 .animation(.spring(response: 0.35, dampingFraction: 0.78), value: state.isPeeking)
-                .animation(.spring(response: 0.35, dampingFraction: 0.78), value: state.activeHUD)
+                .animation(.spring(response: 0.38, dampingFraction: 0.72), value: state.activeHUD)
                 .animation(.spring(response: 0.35, dampingFraction: 0.78), value: state.shouldHideForFullScreen)
             }
             
