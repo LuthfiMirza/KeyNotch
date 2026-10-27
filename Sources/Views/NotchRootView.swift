@@ -185,6 +185,8 @@ public struct NotchRootView: View {
             // Tab Content Container
             ZStack {
                 switch state.selectedTab {
+                case .music:
+                    MusicTabView()
                 case .controls:
                     ControlsMediaTabView()
                 case .shelf:
