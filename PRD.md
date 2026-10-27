@@ -18,7 +18,7 @@ Build a super-lightweight (~2 MB binary, ~0.0% idle CPU), native macOS Dynamic I
    - **Micro-Lip State (Hover Peek Mode - Idle)**: `180px × 4px` subtle lip flush to top bezel. Zero obstruction to browser tabs or window title bars.
    - **Compact Notch State (Always Visible - Idle)**: `210px × 36px` sleek pill displaying Dead-Center Clock, mini status glyph, or active audio mini-waveform.
    - **Full Screen Auto-Hide State**: Notch collapses to `0px × 0px` when a native macOS Full Screen app is active, allowing full video immersion. Hovering within 4px of the top edge temporarily reveals the island with spring animation.
-   - **Expanded Island State (Active)**: `520px × 240px` (animated with iOS spring physics) featuring navigation tabs:
+   - **Expanded Island State (Active)**: `520px × 278px` (animated with iOS spring physics) featuring navigation tabs:
      - **Tab 1: Media & Controls** (Now Playing, System Stats, iOS Control Center, Caffeinate, Dev Ports, Color Picker).
      - **Tab 2: Shelf & Clipboard** (File Drop Zone, Quick Image Converter/OCR, Clipboard History).
      - **Tab 3: Focus & Notes** (Quick Notes/Reminders with checkboxes, Pomodoro Timer).
