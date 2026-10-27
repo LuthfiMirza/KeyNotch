@@ -57,10 +57,13 @@ public struct CapsuleSliderView: View {
                     }
             )
         }
-        .frame(height: 36)
+        .frame(height: 32)
     }
     
     private func dynamicIconName() -> String {
+        if iconName.contains("sun") {
+            return value < 0.33 ? "sun.min.fill" : "sun.max.fill"
+        }
         if value <= 0.001 {
             return "speaker.slash.fill"
         } else if value < 0.33 {
