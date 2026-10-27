@@ -15,6 +15,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         HUDInterceptorService.shared.startMonitoring()
         BatteryService.shared.updateBatteryState(isInitial: true)
         BluetoothService.shared.startMonitoring()
+        MicrophoneService.shared.startMonitoring()
         FullScreenMonitorService.shared.startMonitoring()
         MediaRemoteService.shared.refreshNowPlaying()
         
@@ -104,6 +105,17 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         caffItem.state = CaffeinateService.shared.isCaffeinated ? .on : .off
         menu.addItem(caffItem)
         
+        // Microphone Mute Toggle
+        let micItem = NSMenuItem(
+            title: MicrophoneService.shared.isMuted ? "Unmute Microphone" : "Mute Microphone",
+            action: #selector(toggleMicMute),
+            keyEquivalent: "m"
+        )
+        micItem.keyEquivalentModifierMask = [.option, .shift]
+        micItem.target = self
+        micItem.state = MicrophoneService.shared.isMuted ? .on : .off
+        menu.addItem(micItem)
+        
         // Hide / Show
         let hideItem = NSMenuItem(
             title: IslandState.shared.isHidden ? "Show Island" : "Hide Island",
@@ -170,6 +182,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
     
     @objc private func toggleCaffeinate() {
         CaffeinateService.shared.toggle()
+    }
+    
+    @objc private func toggleMicMute() {
+        MicrophoneService.shared.toggleMute()
     }
     
     @objc private func toggleHideIsland() {
