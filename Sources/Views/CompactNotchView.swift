@@ -7,6 +7,7 @@ public struct CompactNotchView: View {
     @ObservedObject var battery = BatteryService.shared
     @ObservedObject var pomodoro = PomodoroService.shared
     @ObservedObject var mic = MicrophoneService.shared
+    @ObservedObject var network = NetworkMonitorService.shared
     
     @State private var currentTime: String = ""
     @State private var clockTimer: AnyCancellable?
@@ -20,6 +21,15 @@ public struct CompactNotchView: View {
     
     // Vibrant Activity Ring Green
     private let ringColor = Color(red: 0.18, green: 0.86, blue: 0.44)
+    
+    private var pingColor: Color {
+        switch network.pingQuality {
+        case .excellent, .good: return .green
+        case .fair: return .yellow
+        case .poor: return .red
+        case .unknown: return .gray
+        }
+    }
     
     public init() {}
     
@@ -81,16 +91,35 @@ public struct CompactNotchView: View {
             
             Spacer(minLength: 0)
             
-            // MARK: - Right: Reactive Audio Waveform
+            // MARK: - Right: Reactive Audio Waveform OR Compact Network Pill
             HStack {
-                WaveformView(
-                    isPlaying: media.isPlaying,
-                    color: .white,
-                    barCount: 4,
-                    maxHeight: 15
-                )
+                if media.isPlaying {
+                    WaveformView(
+                        isPlaying: true,
+                        color: .white,
+                        barCount: 4,
+                        maxHeight: 15
+                    )
+                } else if network.showInCompactNotch {
+                    HStack(spacing: 3) {
+                        Circle()
+                            .fill(pingColor)
+                            .frame(width: 5, height: 5)
+                        Text(network.downloadSpeedString)
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundColor(.white.opacity(0.85))
+                            .lineLimit(1)
+                    }
+                } else {
+                    WaveformView(
+                        isPlaying: false,
+                        color: .white,
+                        barCount: 4,
+                        maxHeight: 15
+                    )
+                }
             }
-            .frame(width: 48, alignment: .trailing)
+            .frame(width: (network.showInCompactNotch && !media.isPlaying) ? 68 : 48, alignment: .trailing)
             .padding(.trailing, 14)
         }
         .frame(height: state.notchHeight)
