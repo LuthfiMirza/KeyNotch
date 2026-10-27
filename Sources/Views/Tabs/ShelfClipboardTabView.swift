@@ -31,7 +31,7 @@ public struct StagedFile: Identifiable {
 
 public struct ShelfClipboardTabView: View {
     @ObservedObject var clipboard = ClipboardService.shared
-    @State private var subTab: Int = 0 // 0 = Files Shelf, 1 = Clipboard
+    @State private var subTab: Int = 0 // 0 = Files Shelf, 1 = Clipboard History, 2 = Sequential Paste Queue
     @State private var stagedFiles: [StagedFile] = []
     @State private var isTargeted: Bool = false
     
@@ -58,7 +58,7 @@ public struct ShelfClipboardTabView: View {
                         }
                     }
                     .foregroundColor(subTab == 0 ? .white : .white.opacity(0.5))
-                    .padding(.horizontal, 10)
+                    .padding(.horizontal, 9)
                     .padding(.vertical, 4)
                     .background(subTab == 0 ? Color.white.opacity(0.12) : Color.clear)
                     .clipShape(Capsule())
@@ -83,15 +83,41 @@ public struct ShelfClipboardTabView: View {
                         }
                     }
                     .foregroundColor(subTab == 1 ? .white : .white.opacity(0.5))
-                    .padding(.horizontal, 10)
+                    .padding(.horizontal, 9)
                     .padding(.vertical, 4)
                     .background(subTab == 1 ? Color.white.opacity(0.12) : Color.clear)
                     .clipShape(Capsule())
                 }
                 .buttonStyle(PlainButtonStyle())
                 
+                // Sequential Paste Queue Tab
+                Button(action: { subTab = 2 }) {
+                    HStack(spacing: 5) {
+                        Image(systemName: "square.stack.3d.down.right.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text("Paste Queue")
+                            .font(.system(size: 11, weight: .semibold))
+                        if !clipboard.pasteQueue.isEmpty {
+                            Text("\(clipboard.pasteQueue.count)")
+                                .font(.system(size: 9, weight: .bold))
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(Color.green)
+                                .foregroundColor(.black)
+                                .clipShape(Capsule())
+                        }
+                    }
+                    .foregroundColor(subTab == 2 ? .white : .white.opacity(0.5))
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .background(subTab == 2 ? Color.white.opacity(0.12) : Color.clear)
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(PlainButtonStyle())
+                
                 Spacer()
                 
+                // Context Actions
                 if subTab == 0 && !stagedFiles.isEmpty {
                     Button(action: { stagedFiles.removeAll() }) {
                         Text("Clear All")
@@ -99,9 +125,39 @@ public struct ShelfClipboardTabView: View {
                             .foregroundColor(.white.opacity(0.5))
                     }
                     .buttonStyle(PlainButtonStyle())
-                } else if subTab == 1 && !clipboard.history.isEmpty {
-                    Button(action: { clipboard.clearHistory() }) {
-                        Text("Clear")
+                } else if subTab == 1 {
+                    HStack(spacing: 8) {
+                        // Plain-Text Sanitizer Toggle
+                        Button(action: {
+                            clipboard.toggleAutoCleanPlainText()
+                        }) {
+                            HStack(spacing: 3) {
+                                Image(systemName: clipboard.autoCleanPlainText ? "checkmark.circle.fill" : "circle")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundColor(clipboard.autoCleanPlainText ? .green : .white.opacity(0.4))
+                                Text("Clean Text")
+                                    .font(.system(size: 9, weight: .medium))
+                                    .foregroundColor(clipboard.autoCleanPlainText ? .white : .white.opacity(0.5))
+                            }
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(clipboard.autoCleanPlainText ? Color.green.opacity(0.18) : Color.white.opacity(0.06))
+                            .clipShape(Capsule())
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        
+                        if !clipboard.history.isEmpty {
+                            Button(action: { clipboard.clearHistory() }) {
+                                Text("Clear")
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundColor(.white.opacity(0.5))
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+                } else if subTab == 2 && !clipboard.pasteQueue.isEmpty {
+                    Button(action: { clipboard.clearQueue() }) {
+                        Text("Clear Queue")
                             .font(.system(size: 10, weight: .medium))
                             .foregroundColor(.white.opacity(0.5))
                     }
@@ -113,8 +169,10 @@ public struct ShelfClipboardTabView: View {
             // Content
             if subTab == 0 {
                 filesShelfView
-            } else {
+            } else if subTab == 1 {
                 clipboardHistoryView
+            } else {
+                pasteQueueView
             }
         }
     }
@@ -198,57 +256,39 @@ public struct ShelfClipboardTabView: View {
             // Quick Actions for Images
             if file.isImage {
                 HStack(spacing: 5) {
-                    // Compress JPG
                     Button(action: {
-                        FileConverterService.shared.convertImage(url: file.url, to: .jpg(quality: 0.75)) { newUrl in
-                            if let newUrl = newUrl {
-                                stagedFiles.append(StagedFile(url: newUrl))
-                            }
-                        }
+                        FileConverterService.shared.convertImage(url: file.url, to: .png) { _ in }
                     }) {
-                        Text("Compress")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 7)
+                        Text("PNG")
+                            .font(.system(size: 9, weight: .bold))
+                            .padding(.horizontal, 6)
                             .padding(.vertical, 3)
-                            .background(Color.orange.opacity(0.3))
+                            .background(Color.white.opacity(0.12))
                             .clipShape(Capsule())
                     }
                     .buttonStyle(PlainButtonStyle())
                     
-                    // To PNG
                     Button(action: {
-                        FileConverterService.shared.convertImage(url: file.url, to: .png) { newUrl in
-                            if let newUrl = newUrl {
-                                stagedFiles.append(StagedFile(url: newUrl))
-                            }
-                        }
+                        FileConverterService.shared.convertImage(url: file.url, to: .jpg(quality: 0.8)) { _ in }
                     }) {
-                        Text("To PNG")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 7)
+                        Text("JPG")
+                            .font(.system(size: 9, weight: .bold))
+                            .padding(.horizontal, 6)
                             .padding(.vertical, 3)
-                            .background(Color.blue.opacity(0.3))
+                            .background(Color.white.opacity(0.12))
                             .clipShape(Capsule())
                     }
                     .buttonStyle(PlainButtonStyle())
                     
-                    // Quick OCR
                     Button(action: {
                         FileConverterService.shared.performOCR(on: file.url) { _ in }
                     }) {
-                        HStack(spacing: 3) {
-                            Image(systemName: "text.viewfinder")
-                                .font(.system(size: 9))
-                            Text("OCR")
-                                .font(.system(size: 9, weight: .semibold))
-                        }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(Color.green.opacity(0.3))
-                        .clipShape(Capsule())
+                        Image(systemName: "text.viewfinder")
+                            .font(.system(size: 10, weight: .bold))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 4)
+                            .background(Color.purple.opacity(0.3))
+                            .clipShape(Capsule())
                     }
                     .buttonStyle(PlainButtonStyle())
                 }
@@ -256,7 +296,9 @@ public struct ShelfClipboardTabView: View {
             
             // Remove Button
             Button(action: {
-                stagedFiles.removeAll { $0.id == file.id }
+                withAnimation {
+                    stagedFiles.removeAll { $0.id == file.id }
+                }
             }) {
                 Image(systemName: "xmark")
                     .font(.system(size: 10, weight: .bold))
@@ -269,7 +311,6 @@ public struct ShelfClipboardTabView: View {
         .padding(.vertical, 6)
         .background(Color.white.opacity(0.06))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        // Enables dragging file back out to any application
         .onDrag {
             NSItemProvider(contentsOf: file.url) ?? NSItemProvider()
         }
@@ -344,6 +385,24 @@ public struct ShelfClipboardTabView: View {
             
             Spacer()
             
+            // Add to Sequential Paste Queue
+            Button(action: {
+                clipboard.addToQueue(item)
+            }) {
+                HStack(spacing: 3) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 9, weight: .bold))
+                    Text("Queue")
+                        .font(.system(size: 9, weight: .semibold))
+                }
+                .foregroundColor(.white.opacity(0.8))
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3.5)
+                .background(Color.white.opacity(0.08))
+                .clipShape(Capsule())
+            }
+            .buttonStyle(PlainButtonStyle())
+            
             // 1-Click Copy with Checkmark Feedback
             Button(action: {
                 clipboard.copyToPasteboard(item)
@@ -374,6 +433,100 @@ public struct ShelfClipboardTabView: View {
         .background(Color.white.opacity(0.05))
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
+    
+    // MARK: - Sequential Paste Queue View
+    
+    private var pasteQueueView: some View {
+        VStack(spacing: 6) {
+            if clipboard.pasteQueue.isEmpty {
+                VStack(spacing: 6) {
+                    Image(systemName: "square.stack.3d.down.right")
+                        .font(.system(size: 24))
+                        .foregroundColor(.white.opacity(0.3))
+                    Text("Sequential Paste Queue is empty")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.white.opacity(0.7))
+                    Text("Click '+ Queue' on any snippet. Then press ⌥⇧V anywhere to paste in order.")
+                        .font(.system(size: 10))
+                        .foregroundColor(.white.opacity(0.4))
+                        .multilineTextAlignment(.center)
+                }
+                .padding(12)
+                .frame(height: 125)
+            } else {
+                VStack(spacing: 6) {
+                    // Quick Action: Paste Next
+                    HStack {
+                        Button(action: {
+                            clipboard.popNextInQueue()
+                        }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "play.fill")
+                                    .font(.system(size: 10, weight: .bold))
+                                Text("Paste Next Snippet")
+                                    .font(.system(size: 11, weight: .bold))
+                                Text("(⌥⇧V)")
+                                    .font(.system(size: 9, weight: .medium))
+                                    .foregroundColor(.black.opacity(0.6))
+                            }
+                            .foregroundColor(.black)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 5)
+                            .background(Color.green)
+                            .clipShape(Capsule())
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        
+                        Spacer()
+                        
+                        Text("\(clipboard.pasteQueue.count) items ready")
+                            .font(.system(size: 10))
+                            .foregroundColor(.white.opacity(0.5))
+                    }
+                    .padding(.horizontal, 14)
+                    
+                    ScrollView(.vertical, showsIndicators: false) {
+                        VStack(spacing: 5) {
+                            ForEach(Array(clipboard.pasteQueue.enumerated()), id: \.element.id) { index, item in
+                                HStack(spacing: 8) {
+                                    Text("#\(index + 1)")
+                                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                        .foregroundColor(index == 0 ? .green : .white.opacity(0.4))
+                                        .padding(.horizontal, 5)
+                                        .padding(.vertical, 2)
+                                        .background(index == 0 ? Color.green.opacity(0.2) : Color.white.opacity(0.06))
+                                        .clipShape(Capsule())
+                                    
+                                    Text(item.content)
+                                        .font(.system(size: 11))
+                                        .foregroundColor(index == 0 ? .white : .white.opacity(0.7))
+                                        .lineLimit(1)
+                                    
+                                    Spacer()
+                                    
+                                    Button(action: {
+                                        clipboard.removeFromQueue(at: index)
+                                    }) {
+                                        Image(systemName: "xmark")
+                                            .font(.system(size: 9, weight: .bold))
+                                            .foregroundColor(.white.opacity(0.35))
+                                            .frame(width: 18, height: 18)
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(index == 0 ? Color.green.opacity(0.08) : Color.white.opacity(0.04))
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            }
+                        }
+                        .padding(.horizontal, 14)
+                    }
+                    .frame(height: 98)
+                }
+            }
+        }
+    }
 }
 
 // MARK: - Color Hex Initializer Extension
@@ -391,13 +544,14 @@ extension Color {
         case 8: // ARGB (32-bit)
             (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
         default:
-            (a, r, g, b) = (255, 128, 128, 128)
+            (a, r, g, b) = (1, 1, 1, 0)
         }
+
         self.init(
             .sRGB,
             red: Double(r) / 255,
             green: Double(g) / 255,
-            blue: Double(b) / 255,
+            blue:  Double(b) / 255,
             opacity: Double(a) / 255
         )
     }
