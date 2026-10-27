@@ -426,7 +426,7 @@ public struct ControlsMediaTabView: View {
                                 Circle()
                                     .fill(Color.green)
                                     .frame(width: 4, height: 4)
-                                Text(":\(port.port)")
+                                Text(":\(String(port.port))")
                                     .font(.system(size: 9, weight: .bold, design: .monospaced))
                                     .foregroundColor(.white)
                                 
