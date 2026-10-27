@@ -84,7 +84,10 @@ public final class LyricsService: ObservableObject {
     public func fetchLyrics(title: String, artist: String) {
         guard !title.isEmpty else { return }
         
-        let key = "\(title) - \(artist)".lowercased()
+        let cleanedTitle = cleanTrackTitle(title)
+        let cleanedArtist = cleanTrackTitle(artist)
+        let key = "\(cleanedTitle) - \(cleanedArtist)".lowercased()
+        
         if let cached = cache[key] {
             self.lyrics = cached
             self.statusMessage = cached.isEmpty ? "No lyrics found" : nil
@@ -94,42 +97,61 @@ public final class LyricsService: ObservableObject {
         isLoading = true
         statusMessage = "Fetching synchronized lyrics..."
         
-        // Clean title (remove (feat. ...), [Remastered], etc.)
-        let cleanedTitle = cleanTrackTitle(title)
+        // Build candidate combinations for YouTube and standard audio
+        var candidates: [(track: String, artist: String)] = []
+        candidates.append((track: cleanedTitle, artist: cleanedArtist))
         
-        guard let encodedTrack = cleanedTitle.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let encodedArtist = artist.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
-            isLoading = false
-            statusMessage = "Invalid track details"
+        for sep in [" - ", " – ", " — "] {
+            if title.contains(sep) {
+                let parts = title.components(separatedBy: sep)
+                if parts.count >= 2 {
+                    let p0 = cleanTrackTitle(parts[0])
+                    let p1 = cleanTrackTitle(parts[1...].joined(separator: sep))
+                    candidates.append((track: p0, artist: p1))
+                    candidates.append((track: p1, artist: p0))
+                }
+            }
+        }
+        
+        tryCandidate(candidates, at: 0, cacheKey: key, fallbackQuery: cleanedTitle)
+    }
+    
+    private func tryCandidate(_ candidates: [(track: String, artist: String)], at index: Int, cacheKey: String, fallbackQuery: String) {
+        guard index < candidates.count else {
+            // All direct gets exhausted; search via query
+            fallbackSearchLyrics(query: fallbackQuery, cacheKey: cacheKey)
             return
         }
         
-        let urlStr = "https://lrclib.net/api/get?track_name=\(encodedTrack)&artist_name=\(encodedArtist)"
-        guard let url = URL(string: urlStr) else {
-            isLoading = false
+        let c = candidates[index]
+        guard let encodedTrack = c.track.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let encodedArtist = c.artist.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let url = URL(string: "https://lrclib.net/api/get?track_name=\(encodedTrack)&artist_name=\(encodedArtist)") else {
+            tryCandidate(candidates, at: index + 1, cacheKey: cacheKey, fallbackQuery: fallbackQuery)
             return
         }
         
         var request = URLRequest(url: url)
         request.setValue("KeyNotch Dynamic Island App (macOS)", forHTTPHeaderField: "User-Agent")
-        request.timeoutInterval = 6.0
+        request.timeoutInterval = 4.0
         
         URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             DispatchQueue.main.async {
                 guard let self = self else { return }
                 
                 if let httpResp = response as? HTTPURLResponse, httpResp.statusCode == 200, let data = data {
-                    if let parsed = self.parseLRCLIBResponse(data: data) {
-                        self.cache[key] = parsed
+                    if let parsed = self.parseLRCLIBResponse(data: data), !parsed.isEmpty {
+                        self.cache[cacheKey] = parsed
                         self.lyrics = parsed
                         self.isLoading = false
-                        self.statusMessage = parsed.isEmpty ? "No synchronized lyrics available" : nil
+                        self.statusMessage = nil
+                        self.updateCurrentLine(for: MediaRemoteService.shared.elapsedTime)
                         return
                     }
                 }
                 
-                // Fallback: search endpoint
-                self.fallbackSearchLyrics(query: "\(cleanedTitle) \(artist)", cacheKey: key)
+                // Try next candidate
+                self.tryCandidate(candidates, at: index + 1, cacheKey: cacheKey, fallbackQuery: fallbackQuery)
             }
         }.resume()
     }
@@ -144,7 +166,7 @@ public final class LyricsService: ObservableObject {
         
         var request = URLRequest(url: url)
         request.setValue("KeyNotch Dynamic Island App (macOS)", forHTTPHeaderField: "User-Agent")
-        request.timeoutInterval = 6.0
+        request.timeoutInterval = 5.0
         
         URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             DispatchQueue.main.async {
@@ -160,6 +182,24 @@ public final class LyricsService: ObservableObject {
                                 self.cache[cacheKey] = parsed
                                 self.lyrics = parsed
                                 self.statusMessage = nil
+                                self.updateCurrentLine(for: MediaRemoteService.shared.elapsedTime)
+                                return
+                            }
+                        }
+                    }
+                    
+                    // Plain lyrics fallback if no synced version
+                    for item in items {
+                        if let plain = item["plainLyrics"] as? String, !plain.isEmpty {
+                            let lines = plain.components(separatedBy: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+                            let parsed = lines.enumerated().map { i, text in
+                                LyricLine(id: i, time: Double(i * 4), text: text)
+                            }
+                            if !parsed.isEmpty {
+                                self.cache[cacheKey] = parsed
+                                self.lyrics = parsed
+                                self.statusMessage = nil
+                                self.updateCurrentLine(for: MediaRemoteService.shared.elapsedTime)
                                 return
                             }
                         }
