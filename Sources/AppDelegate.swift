@@ -15,6 +15,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         HUDInterceptorService.shared.startMonitoring()
         BatteryService.shared.updateBatteryState(isInitial: true)
         BluetoothService.shared.startMonitoring()
+        FullScreenMonitorService.shared.startMonitoring()
         MediaRemoteService.shared.refreshNowPlaying()
         
         // Setup Menu Bar Tray Icon
@@ -82,6 +83,16 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         peekItem.target = self
         peekItem.state = IslandState.shared.isHoverPeekMode ? .on : .off
         menu.addItem(peekItem)
+        
+        // Auto-Hide in Full Screen
+        let fsItem = NSMenuItem(
+            title: "Auto-Hide in Full Screen",
+            action: #selector(toggleAutoHideFullScreen),
+            keyEquivalent: ""
+        )
+        fsItem.target = self
+        fsItem.state = IslandState.shared.autoHideOnFullScreen ? .on : .off
+        menu.addItem(fsItem)
         
         // Caffeinate Toggle
         let caffItem = NSMenuItem(
@@ -151,6 +162,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
     
     @objc private func toggleHoverPeekMode() {
         IslandState.shared.toggleHoverPeekMode()
+    }
+    
+    @objc private func toggleAutoHideFullScreen() {
+        IslandState.shared.toggleAutoHideFullScreen()
     }
     
     @objc private func toggleCaffeinate() {
