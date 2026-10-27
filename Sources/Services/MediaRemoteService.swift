@@ -264,6 +264,17 @@ public final class MediaRemoteService: ObservableObject {
         }
     }
     
+    public func seek(to seconds: Double) {
+        elapsedTime = seconds
+        let isSpotifyRunning = !NSRunningApplication.runningApplications(withBundleIdentifier: "com.spotify.client").isEmpty
+        let target = isSpotifyRunning ? "Spotify" : "Music"
+        let script = "tell application \"\(target)\" to set player position to \(seconds)"
+        DispatchQueue.global(qos: .userInitiated).async {
+            var error: NSDictionary?
+            NSAppleScript(source: script)?.executeAndReturnError(&error)
+        }
+    }
+    
     private func executeAppleScriptMediaCommand(_ command: String) {
         let isSpotifyRunning = !NSRunningApplication.runningApplications(withBundleIdentifier: "com.spotify.client").isEmpty
         let target = isSpotifyRunning ? "Spotify" : "Music"
