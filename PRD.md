@@ -10,19 +10,21 @@ Build a super-lightweight (~2 MB binary, ~0.0% idle CPU), native macOS Dynamic I
 - **App Bundle Type**: Agent App (`LSUIElement = YES` in `Info.plist`, hides Dock icon, lives in Notch + Menu Bar Tray `🏝️`).
 
 ## 3. Window Geometry & States
-1. **Flush Bezel Alignment (0-Pixel Gap)**:
+1. **Flush Bezel Alignment (0-Pixel Gap) & Tangential Concave Fillet**:
    - Pinned to the exact top-center of `NSScreen.main`.
-   - Top edge is flat (`0px` gap from top screen bezel); bottom corners use continuous squircle curvature (`NotchShape`).
-2. **Three Interactive States**:
+   - Top edge is flat (`0px` gap from top screen bezel); top shoulder transitions use cubic Bézier concave fillets with tangential continuity ($dy/dx = 0$ at bezel, $dx/dy = 0$ at side wall) to eliminate sharp horn creases.
+   - Bottom corners use continuous squircle curvature (`NotchShape`).
+2. **Interactive States**:
    - **Micro-Lip State (Hover Peek Mode - Idle)**: `180px × 4px` subtle lip flush to top bezel. Zero obstruction to browser tabs or window title bars.
-   - **Compact Notch State (Always Visible - Idle)**: `210px × 32px` sleek pill displaying Dead-Center Clock, mini status glyph, or active audio mini-waveform.
-   - **Expanded Island State (Active)**: `520px × 230px` (animated with iOS spring physics) featuring navigation tabs:
+   - **Compact Notch State (Always Visible - Idle)**: `210px × 36px` sleek pill displaying Dead-Center Clock, mini status glyph, or active audio mini-waveform.
+   - **Full Screen Auto-Hide State**: Notch collapses to `0px × 0px` when a native macOS Full Screen app is active, allowing full video immersion. Hovering within 4px of the top edge temporarily reveals the island with spring animation.
+   - **Expanded Island State (Active)**: `520px × 240px` (animated with iOS spring physics) featuring navigation tabs:
      - **Tab 1: Media & Controls** (Now Playing, System Stats, iOS Control Center, Caffeinate, Dev Ports, Color Picker).
      - **Tab 2: Shelf & Clipboard** (File Drop Zone, Quick Image Converter/OCR, Clipboard History).
      - **Tab 3: Focus & Notes** (Quick Notes/Reminders with checkboxes, Pomodoro Timer).
-   - **HUD Toast State (Transient)**: `280px × 46px` floating capsule for Volume, Brightness, Caps Lock (`1.4s` auto-dismiss), and MagSafe Charging.
+   - **HUD Toast State (Transient)**: `280px × 46px` floating capsule for Volume, Brightness, Caps Lock (`1.4s` auto-dismiss), MagSafe Charging, and Bluetooth connect.
 
-## 4. Functional Requirements (17 Core Modules)
+## 4. Functional Requirements (18 Core Modules)
 1. **Notch Geometry & Multi-Monitor**: Auto-center on main display, handle screen resolution/space changes (`NSApplication.didChangeScreenParametersNotification`).
 2. **Smart Hover Peek & Click Pass-Through**: Dynamic tracking area; transparent padding around the notch passes mouse clicks to underlying windows (`ignoresMouseEvents` toggling based on cursor path within `NotchShape`).
 3. **Universal Media Controller**: Dynamic `dlopen` interface to `MediaRemote.framework` for Title, Artist, Album Art, Playback State, and Play/Pause/Next/Prev commands + reactive animated waveform.
@@ -39,7 +41,8 @@ Build a super-lightweight (~2 MB binary, ~0.0% idle CPU), native macOS Dynamic I
 14. **Quick Notes & Reminders**: Add/check/delete tasks persisted in `UserDefaults` with full keyboard focus inside `NSPanel`.
 15. **Focus / Pomodoro Timer**: `25m` / `5m` / `15m` countdown timer with `SF Pro Rounded` digits and compact progress indicator.
 16. **Dev Port Monitor & Color Picker**: Scan common dev ports (`3000`, `5173`, `8000`, `8080`) with `lsof` / socket check (on-demand when tab opens) + 1-click Open/Kill, plus `NSColorSampler` screen color picker that copies HEX to clipboard.
-17. **Menu Bar Tray Icon (`🏝️`)**: Left-click toggles expand/collapse; Right-click opens context menu (Toggle Hover Peek Mode, Expand/Collapse, Hide/Show, Quit).
+17. **Full Screen Auto-Hide & Hover Reveal**: Event-driven workspace space changes monitor (`NSWorkspace.activeSpaceDidChangeNotification`) and frontmost window bounds detector to auto-hide in full-screen games/media with zero CPU overhead.
+18. **Menu Bar Tray Icon (`🏝️`)**: Left-click toggles expand/collapse; Right-click opens context menu (Toggle Hover Peek Mode, Full Screen Auto-Hide, Caffeinate, Hide/Show, Test HUDs, Quit).
 
 ## 5. Directory Structure
 ```text
