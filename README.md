@@ -1,8 +1,8 @@
 # 🏝️ KeyNotch — Native All-in-One Dynamic Island for macOS (Monterey 12+)
 
-A lightweight, battery-friendly (idle CPU ~0.0%) native Dynamic Island & living notch powerhouse for macOS. Built entirely with **Swift, AppKit, and SwiftUI** — no bloated Xcode installation required (~700 MB Command Line Tools is all you need).
+A hyper-optimized, battery-friendly (idle CPU **0.0%**, RAM **~24 MB**, binary footprint **752 KB**) native Dynamic Island & living notch powerhouse for macOS. Built entirely with **Swift, AppKit, SwiftUI, and Metal** — compiled purely via Command Line Tools (`swiftc -Osize -dead_strip`) without requiring an Xcode installation.
 
-Designed as a zero-obstruction command center that blends hardware telemetry, media controls, file staging, and developer utilities directly into your MacBook bezel.
+Engineered with a **True Zero-Draw** architecture: WindowServer compositing cuts to zero when hidden, clock ticks sync to exact minute boundaries (1x/min wakeups), audio waveforms are rendered directly on the Metal GPU layer without CPU polling, and media artwork bitmaps are automatically purged when inactive.
 
 ---
 
