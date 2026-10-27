@@ -9,10 +9,20 @@ public struct ControlsMediaTabView: View {
     @ObservedObject var hud = HUDInterceptorService.shared
     @ObservedObject var devTools = DevToolsService.shared
     @ObservedObject var mic = MicrophoneService.shared
+    @ObservedObject var network = NetworkMonitorService.shared
     
     @State private var wifiName: String = "Wi-Fi"
     @State private var isFocusActive: Bool = false
     @State private var isBluetoothOn: Bool = true
+    
+    private var pingColor: Color {
+        switch network.pingQuality {
+        case .excellent, .good: return .green
+        case .fair: return .yellow
+        case .poor: return .red
+        case .unknown: return .gray
+        }
+    }
     
     public init() {}
     
@@ -168,6 +178,50 @@ public struct ControlsMediaTabView: View {
             .padding(.vertical, 4)
             .background(Color.white.opacity(0.07))
             .clipShape(Capsule())
+            
+            // Network Speedometer Pill (Download & Upload)
+            HStack(spacing: 5) {
+                HStack(spacing: 2) {
+                    Image(systemName: "arrow.down")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundColor(.green)
+                    Text(network.downloadSpeedString)
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.9))
+                }
+                
+                HStack(spacing: 2) {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundColor(.blue)
+                    Text(network.uploadSpeedString)
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.9))
+                }
+            }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(Color.white.opacity(0.07))
+            .clipShape(Capsule())
+            
+            // Ping Radar Pill
+            Button(action: {
+                network.sampleNetwork()
+            }) {
+                HStack(spacing: 3) {
+                    Circle()
+                        .fill(pingColor)
+                        .frame(width: 5, height: 5)
+                    Text(network.pingString)
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.9))
+                }
+                .padding(.horizontal, 7)
+                .padding(.vertical, 4)
+                .background(Color.white.opacity(0.07))
+                .clipShape(Capsule())
+            }
+            .buttonStyle(PlainButtonStyle())
             
             Spacer()
             
