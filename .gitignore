@@ -1,0 +1,16 @@
+# macOS system files
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Build artifacts and binaries
+build/
+*.app/
+*.dSYM/
+*.o
+*.swiftdoc
+*.swiftmodule
+*.swiftsourceinfo
