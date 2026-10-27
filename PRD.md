@@ -30,7 +30,7 @@ Build a super-lightweight (~2 MB binary, ~0.0% idle CPU), native macOS Dynamic I
 3. **Universal Media Controller**: Dynamic `dlopen` interface to `MediaRemote.framework` for Title, Artist, Album Art, Playback State, and Play/Pause/Next/Prev commands + reactive animated waveform.
 4. **Battery & MagSafe HUD**: `IOKit.ps` observer triggering charging animation when AC power state changes.
 5. **Global Hotkey (`Option + Space`)**: Carbon `RegisterEventHotKey` to toggle expand/collapse globally.
-6. **Mach Kernel CPU & RAM Monitor**: `host_statistics64` for live CPU % and RAM GB/percentage (active only when expanded).
+6. **Mach Kernel CPU & RAM Monitor & Network Radar**: `host_statistics64` for live CPU % and RAM GB/percentage, plus BSD socket `getifaddrs` for real-time Download/Upload speeds and zero-overhead TCP socket ping latency radar (active only when expanded or enabled in compact notch).
 7. **Caffeinate Toggle**: `IOPMAssertionCreateWithName` (`kIOPMAssertionTypePreventUserIdleDisplaySleep`) toggleable with 1 click.
 8. **Floating Caps Lock HUD**: `NSEvent.flagsChanged` monitor detecting `.capsLock` state toggles.
 9. **System Volume HUD**: Intercept or monitor media keys / system output volume (`AudioToolbox` / `NSSound`) to display sleek iOS volume capsule.
@@ -69,6 +69,8 @@ KeyNotch/
     │   ├── CaffeinateService.swift
     │   ├── ClipboardService.swift
     │   ├── HUDInterceptorService.swift
+    │   ├── MicrophoneService.swift
+    │   ├── NetworkMonitorService.swift
     │   ├── FileConverterService.swift
     │   └── DevToolsService.swift
     └── Views/
