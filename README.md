@@ -59,6 +59,12 @@ Engineered with a **True Zero-Draw** architecture: WindowServer compositing cuts
    - Real-time Mach kernel hardware telemetry (`host_statistics64`) integrated into the Controls tab.
    - Live CPU load percentage and physical RAM usage meter (e.g., `5.2 GB / 16.0 GB`).
 
+10. **🌐 Real-Time Internet Speedometer & Ping Latency Radar:**
+    - Real-time BSD socket network interface monitoring (`getifaddrs`) measuring live Download (⬇️) and Upload (⬆️) speeds with counter wrap-around handling.
+    - **Native TCP Ping Radar**: Measures latency to DNS servers (`1.1.1.1` / `8.8.8.8`) via lightweight socket connect with color-coded signal quality (🟢 `<45ms`, 🟡 `45-160ms`, 🔴 `>160ms`).
+    - **Zero-CPU Pausing**: Network polling strictly halts when the island is collapsed to preserve battery life.
+    - **Compact Notch Mode**: Toggleable from the menu bar or Controls tab to display live download speed and ping status directly inside the collapsed notch pill when audio is idle.
+
 ---
 
 ### 🗂️ Productivity, Shelf & Quick Actions
