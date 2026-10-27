@@ -24,6 +24,9 @@ Build a super-lightweight (~2 MB binary, ~0.0% idle CPU), native macOS Dynamic I
      - **Tab 3: Shelf & Clipboard** (File Drop Zone, Quick Image Converter/OCR, Clipboard History).
      - **Tab 4: Focus & Notes** (Quick Notes/Reminders with checkboxes, Pomodoro Timer).
      - **Tab 5: Market & Crypto** (Live USD/IDR, BTC, ETH, BBCA, AAPL, NVDA with category filters, live quotes & pin to compact notch).
+   - **Split-View Synced Lyrics State (Active Karaoke Mode)**: Horizontal expansion to `680px × 278px` with fluid spring physics when tapping the lyrics button (`💬`):
+     - **Left Column (~270px)**: Compact player with album artwork, track title, artist, seek scrubber bar, and full playback controls.
+     - **Right Column (~370px)**: Live synchronized lyrics stream powered by LRCLIB API with karaoke-style active line highlighting, subtle glow, edge fade mask, auto-centering scrolling, and tap-to-seek timestamp navigation.
    - **HUD Toast State (Transient Morphing Capsules)**:
      - **⚡ MagSafe / Charging Capsule**: Expands into an enlarged `370px × 52px` morphing capsule with glowing neon green battery ring, pulsing lightning bolt, bold status typography, and crisp `22pt` battery percentage.
      - **🎧 Bluetooth Connect Capsule**: Expands into an elegant `360px × 48px` capsule with glowing blue ring, Bluetooth rune, device name, and animated audio badge.
@@ -70,6 +73,8 @@ KeyNotch/
     │   ├── MediaRemoteService.swift
     │   ├── SystemTelemetryService.swift
     │   ├── BatteryService.swift
+    │   ├── BrightnessService.swift
+    │   ├── LyricsService.swift
     │   ├── HotKeyService.swift
     │   ├── CaffeinateService.swift
     │   ├── ClipboardService.swift
@@ -84,6 +89,7 @@ KeyNotch/
         ├── CompactNotchView.swift
         ├── HUDToastView.swift
         ├── Tabs/
+        │   ├── MusicTabView.swift
         │   ├── ControlsMediaTabView.swift
         │   ├── ShelfClipboardTabView.swift
         │   ├── NotesTimerTabView.swift
