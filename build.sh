@@ -16,6 +16,9 @@ echo "=================================================="
 # 1. Clean & Prepare Bundle Structure
 mkdir -p "${MACOS_DIR}"
 mkdir -p "${RESOURCES_DIR}"
+if [ -f "Resources/MediaBridge.swift" ]; then
+    cp -f "Resources/MediaBridge.swift" "${RESOURCES_DIR}/MediaBridge.swift"
+fi
 
 # 2. Generate Info.plist
 cat << 'EOF' > "${CONTENTS_DIR}/Info.plist"
