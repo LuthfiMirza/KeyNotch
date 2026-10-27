@@ -45,6 +45,43 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         ) { _ in
             BluetoothService.shared.triggerTestBluetoothHUD(name: "AirBuds Pro", battery: 70)
         }
+        
+        DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("com.keynotch.expandMusic"),
+            object: nil,
+            queue: .main
+        ) { _ in
+            IslandState.shared.selectedTab = .music
+            if !IslandState.shared.isExpanded {
+                IslandState.shared.expand()
+            }
+        }
+        
+        DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("com.keynotch.toggleLyrics"),
+            object: nil,
+            queue: .main
+        ) { _ in
+            IslandState.shared.selectedTab = .music
+            if !IslandState.shared.isExpanded {
+                IslandState.shared.expand()
+            }
+            LyricsService.shared.toggleLyrics()
+        }
+        
+        DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("com.keynotch.simulateTrack"),
+            object: nil,
+            queue: .main
+        ) { _ in
+            MediaRemoteService.shared.title = "Yellow"
+            MediaRemoteService.shared.artist = "Coldplay"
+            MediaRemoteService.shared.album = "Parachutes"
+            MediaRemoteService.shared.duration = 267.0
+            MediaRemoteService.shared.elapsedTime = 38.0
+            MediaRemoteService.shared.isPlaying = true
+            LyricsService.shared.fetchLyrics(title: "Yellow", artist: "Coldplay")
+        }
     }
     
     // MARK: - Menu Bar Setup
