@@ -19,10 +19,11 @@ Build a super-lightweight (~2 MB binary, ~0.0% idle CPU), native macOS Dynamic I
    - **Compact Notch State (Always Visible - Idle)**: `210px × 36px` sleek pill displaying Dead-Center Clock, mini status glyph, or active audio mini-waveform.
    - **Full Screen Auto-Hide State**: Notch collapses to `0px × 0px` when a native macOS Full Screen app is active, allowing full video immersion. Hovering within 4px of the top edge temporarily reveals the island with spring animation.
    - **Expanded Island State (Active)**: `520px × 278px` (animated with iOS spring physics) featuring navigation tabs:
-     - **Tab 1: Media & Controls** (Now Playing, System Stats, iOS Control Center, Caffeinate, Dev Ports, Color Picker).
-     - **Tab 2: Shelf & Clipboard** (File Drop Zone, Quick Image Converter/OCR, Clipboard History).
-     - **Tab 3: Focus & Notes** (Quick Notes/Reminders with checkboxes, Pomodoro Timer).
-     - **Tab 4: Market & Crypto** (Live USD/IDR, BTC, ETH, BBCA, AAPL, NVDA with category filters, live quotes & pin to compact notch).
+     - **Tab 1: Music** (Dedicated Audio Player, Artwork, Interactive Scrubber Bar, Synced Lyrics).
+     - **Tab 2: Controls** (Dual Sliders for Brightness & Volume, Wi-Fi, Bluetooth, Mic Mute, Caffeinate, Focus, Telemetry, Dev Ports & Loupe Color Picker).
+     - **Tab 3: Shelf & Clipboard** (File Drop Zone, Quick Image Converter/OCR, Clipboard History).
+     - **Tab 4: Focus & Notes** (Quick Notes/Reminders with checkboxes, Pomodoro Timer).
+     - **Tab 5: Market & Crypto** (Live USD/IDR, BTC, ETH, BBCA, AAPL, NVDA with category filters, live quotes & pin to compact notch).
    - **HUD Toast State (Transient Morphing Capsules)**:
      - **⚡ MagSafe / Charging Capsule**: Expands into an enlarged `370px × 52px` morphing capsule with glowing neon green battery ring, pulsing lightning bolt, bold status typography, and crisp `22pt` battery percentage.
      - **🎧 Bluetooth Connect Capsule**: Expands into an elegant `360px × 48px` capsule with glowing blue ring, Bluetooth rune, device name, and animated audio badge.
