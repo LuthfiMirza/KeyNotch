@@ -12,7 +12,12 @@ public struct NotchRootView: View {
     private var currentWidth: CGFloat {
         if state.isHidden { return 0 }
         if state.isExpanded { return 520 }
-        if state.activeHUD != nil { return 280 }
+        if let hud = state.activeHUD {
+            if hud.type == .battery || hud.type == .bluetooth {
+                return 340
+            }
+            return 280
+        }
         if state.isHoverPeekMode {
             return state.isPeeking ? 210 : 180
         }
@@ -22,7 +27,9 @@ public struct NotchRootView: View {
     private var currentHeight: CGFloat {
         if state.isHidden { return 0 }
         if state.isExpanded { return 240 }
-        if state.activeHUD != nil { return 46 }
+        if let hud = state.activeHUD {
+            return (hud.type == .battery || hud.type == .bluetooth) ? 42 : 46
+        }
         if state.isHoverPeekMode {
             return state.isPeeking ? 32 : 4
         }
@@ -31,7 +38,9 @@ public struct NotchRootView: View {
     
     private var currentCornerRadius: CGFloat {
         if state.isExpanded { return 24 }
-        if state.activeHUD != nil { return 20 }
+        if let hud = state.activeHUD {
+            return (hud.type == .battery || hud.type == .bluetooth) ? 21 : 20
+        }
         if isMicroLip { return 2 }
         return 16
     }
