@@ -14,7 +14,7 @@ public final class NotchWindowController: NSObject {
     
     // Maximum canvas bounds for the NSPanel so animations have space without window resizing
     private let maxPanelWidth: CGFloat = 560
-    private let maxPanelHeight: CGFloat = 280
+    private let maxPanelHeight: CGFloat = 320
     
     public override init() {
         super.init()
@@ -165,7 +165,7 @@ public final class NotchWindowController: NSObject {
         
         if state.isExpanded {
             width = 520
-            height = 240
+            height = 278
         } else if let hud = state.activeHUD {
             if hud.type == .battery {
                 width = 370
