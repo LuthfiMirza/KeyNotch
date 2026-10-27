@@ -20,6 +20,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         MediaRemoteService.shared.refreshNowPlaying()
         _ = ClipboardService.shared
         _ = NetworkMonitorService.shared
+        _ = MarketTickerService.shared
         
         // Setup Menu Bar Tray Icon
         setupStatusItem()
@@ -167,6 +168,16 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         netItem.state = NetworkMonitorService.shared.showInCompactNotch ? .on : .off
         menu.addItem(netItem)
         
+        // Market Ticker in Compact Notch
+        let marketItem = NSMenuItem(
+            title: "Market Ticker in Notch",
+            action: #selector(toggleMarketTickerInNotch),
+            keyEquivalent: ""
+        )
+        marketItem.target = self
+        marketItem.state = MarketTickerService.shared.showTickerInCompactNotch ? .on : .off
+        menu.addItem(marketItem)
+        
         menu.addItem(NSMenuItem.separator())
         
         // HUD Live Previews
@@ -230,6 +241,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
     
     @objc private func toggleNetworkSpeedInNotch() {
         NetworkMonitorService.shared.toggleShowInCompactNotch()
+    }
+    
+    @objc private func toggleMarketTickerInNotch() {
+        MarketTickerService.shared.toggleShowTickerInNotch()
     }
     
     @objc private func toggleHideIsland() {
