@@ -126,7 +126,7 @@ public final class NotchWindowController: NSObject {
         guard let screen = NSScreen.main else { return .zero }
         let state = IslandState.shared
         
-        if state.isHidden {
+        if state.isHidden || state.shouldHideForFullScreen {
             return .zero
         }
         
@@ -169,7 +169,7 @@ public final class NotchWindowController: NSObject {
             panel.ignoresMouseEvents = !isInside
         }
         
-        // Hover Peek Detection
+        // Hover Peek Detection (Hover Peek Mode or Full Screen Auto-Hide)
         if state.isHoverPeekMode && !state.isExpanded {
             let distanceFromTop = screen.frame.maxY - location.y
             let horizontalDistance = abs(location.x - screen.frame.midX)
@@ -181,6 +181,21 @@ public final class NotchWindowController: NSObject {
                     }
                 }
             } else if state.isPeeking && distanceFromTop > (activeRect.height + 25) {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+                    state.isPeeking = false
+                }
+            }
+        } else if state.autoHideOnFullScreen && state.isFullScreenAppActive && !state.isExpanded && state.activeHUD == nil {
+            let distanceFromTop = screen.frame.maxY - location.y
+            let horizontalDistance = abs(location.x - screen.frame.midX)
+            
+            if distanceFromTop <= 4 && horizontalDistance <= 120 {
+                if !state.isPeeking {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+                        state.isPeeking = true
+                    }
+                }
+            } else if state.isPeeking && (distanceFromTop > (state.notchHeight + 25) || horizontalDistance > 160) {
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
                     state.isPeeking = false
                 }
