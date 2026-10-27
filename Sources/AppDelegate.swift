@@ -70,17 +70,22 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         }
         
         DistributedNotificationCenter.default().addObserver(
-            forName: NSNotification.Name("com.keynotch.simulateTrack"),
+            forName: NSNotification.Name("com.keynotch.refreshMedia"),
             object: nil,
             queue: .main
         ) { _ in
-            MediaRemoteService.shared.title = "Yellow"
-            MediaRemoteService.shared.artist = "Coldplay"
-            MediaRemoteService.shared.album = "Parachutes"
-            MediaRemoteService.shared.duration = 267.0
-            MediaRemoteService.shared.elapsedTime = 38.0
-            MediaRemoteService.shared.isPlaying = true
-            LyricsService.shared.fetchLyrics(title: "Yellow", artist: "Coldplay")
+            MediaRemoteService.shared.refreshNowPlaying()
+        }
+        
+        DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("com.keynotch.dumpMedia"),
+            object: nil,
+            queue: .main
+        ) { _ in
+            let m = MediaRemoteService.shared
+            let l = LyricsService.shared
+            let str = "Title: \(m.title)\nArtist: \(m.artist)\nisPlaying: \(m.isPlaying)\nduration: \(m.duration)\nelapsed: \(m.elapsedTime)\nhasMedia: \(m.hasActiveMedia)\nLyricsCount: \(l.lyrics.count)\nLyricsStatus: \(l.statusMessage ?? "none")"
+            try? str.write(toFile: "/Users/mac/.gemini/antigravity-ide/brain/c8af4749-1491-47f8-985b-2b520c92e598/scratch/media_debug.txt", atomically: true, encoding: .utf8)
         }
     }
     
