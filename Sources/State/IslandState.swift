@@ -5,6 +5,7 @@ public enum IslandTab: String, CaseIterable, Identifiable {
     case controls = "Controls"
     case shelf = "Shelf"
     case notes = "Notes"
+    case market = "Market"
     
     public var id: String { rawValue }
     
@@ -13,6 +14,7 @@ public enum IslandTab: String, CaseIterable, Identifiable {
         case .controls: return "slider.horizontal.3"
         case .shelf: return "square.and.arrow.down.on.square"
         case .notes: return "checklist"
+        case .market: return "chart.line.uptrend.xyaxis"
         }
     }
 }
