@@ -54,26 +54,56 @@ public final class BatteryService: ObservableObject {
                 self.isConnectedToAC = connected
                 self.powerSourceState = state
                 
-                // Trigger animated MagSafe HUD when charging cable plugged/unplugged
+                // Trigger animated Dynamic Island HUD when charging cable plugged/unplugged
                 if !isInitial, let prev = self.prevConnectedToAC, prev != connected {
-                    let title = connected ? "MagSafe Connected" : "On Battery Power"
-                    let icon = connected ? "bolt.fill" : "battery.75"
-                    IslandState.shared.triggerHUD(
-                        HUDPayload(
-                            type: .battery,
-                            title: title,
-                            subtitle: "\(percent)% Charged",
-                            iconName: icon,
-                            value: Float(percent) / 100.0,
-                            isSuccess: connected
+                    if connected {
+                        IslandState.shared.triggerHUD(
+                            HUDPayload(
+                                type: .battery,
+                                title: "Charging",
+                                subtitle: "Charger connected",
+                                iconName: "bolt.fill",
+                                value: Float(percent) / 100.0,
+                                rightDetail: "\(percent)%",
+                                isSuccess: true
+                            ),
+                            duration: 3.5
                         )
-                    )
+                    } else {
+                        IslandState.shared.triggerHUD(
+                            HUDPayload(
+                                type: .battery,
+                                title: "Battery",
+                                subtitle: "Using battery power",
+                                iconName: "battery.75",
+                                value: Float(percent) / 100.0,
+                                rightDetail: "\(percent)%",
+                                isSuccess: false
+                            ),
+                            duration: 3.0
+                        )
+                    }
                 }
                 
                 self.prevConnectedToAC = connected
             }
             break
         }
+    }
+    
+    public func triggerTestChargingHUD(percent: Int = 70) {
+        IslandState.shared.triggerHUD(
+            HUDPayload(
+                type: .battery,
+                title: "Charging",
+                subtitle: "Charger connected",
+                iconName: "bolt.fill",
+                value: Float(percent) / 100.0,
+                rightDetail: "\(percent)%",
+                isSuccess: true
+            ),
+            duration: 3.5
+        )
     }
     
     deinit {
