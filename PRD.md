@@ -23,7 +23,10 @@ Build a super-lightweight (~2 MB binary, ~0.0% idle CPU), native macOS Dynamic I
      - **Tab 2: Shelf & Clipboard** (File Drop Zone, Quick Image Converter/OCR, Clipboard History).
      - **Tab 3: Focus & Notes** (Quick Notes/Reminders with checkboxes, Pomodoro Timer).
      - **Tab 4: Market & Crypto** (Live USD/IDR, BTC, ETH, BBCA, AAPL, NVDA with category filters, live quotes & pin to compact notch).
-   - **HUD Toast State (Transient)**: `280px × 46px` floating capsule for Volume, Brightness, Caps Lock (`1.4s` auto-dismiss), MagSafe Charging, and Bluetooth connect.
+   - **HUD Toast State (Transient Morphing Capsules)**:
+     - **⚡ MagSafe / Charging Capsule**: Expands into an enlarged `370px × 52px` morphing capsule with glowing neon green battery ring, pulsing lightning bolt, bold status typography, and crisp `22pt` battery percentage.
+     - **🎧 Bluetooth Connect Capsule**: Expands into an elegant `360px × 48px` capsule with glowing blue ring, Bluetooth rune, device name, and animated audio badge.
+     - **Standard Capsule**: `280px × 46px` for Volume, Brightness, Caps Lock, and Quick Toast notifications.
 
 ## 4. Functional Requirements (18 Core Modules)
 1. **Notch Geometry & Multi-Monitor**: Auto-center on main display, handle screen resolution/space changes (`NSApplication.didChangeScreenParametersNotification`).
