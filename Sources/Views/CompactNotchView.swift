@@ -8,6 +8,7 @@ public struct CompactNotchView: View {
     @ObservedObject var pomodoro = PomodoroService.shared
     @ObservedObject var mic = MicrophoneService.shared
     @ObservedObject var network = NetworkMonitorService.shared
+    @ObservedObject var market = MarketTickerService.shared
     
     @State private var currentTime: String = ""
     @State private var clockTimer: AnyCancellable?
@@ -91,7 +92,7 @@ public struct CompactNotchView: View {
             
             Spacer(minLength: 0)
             
-            // MARK: - Right: Reactive Audio Waveform OR Compact Network Pill
+            // MARK: - Right: Reactive Audio Waveform OR Compact Network / Market Pill
             HStack {
                 if media.isPlaying {
                     WaveformView(
@@ -100,6 +101,16 @@ public struct CompactNotchView: View {
                         barCount: 4,
                         maxHeight: 15
                     )
+                } else if market.showTickerInCompactNotch, let item = market.pinnedItem {
+                    HStack(spacing: 3) {
+                        Circle()
+                            .fill(item.isPositive ? Color.green : Color.red)
+                            .frame(width: 5, height: 5)
+                        Text(item.priceString)
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundColor(.white.opacity(0.9))
+                            .lineLimit(1)
+                    }
                 } else if network.showInCompactNotch {
                     HStack(spacing: 3) {
                         Circle()
@@ -119,7 +130,7 @@ public struct CompactNotchView: View {
                     )
                 }
             }
-            .frame(width: (network.showInCompactNotch && !media.isPlaying) ? 68 : 48, alignment: .trailing)
+            .frame(width: (!media.isPlaying && (market.showTickerInCompactNotch || network.showInCompactNotch)) ? 75 : 48, alignment: .trailing)
             .padding(.trailing, 14)
         }
         .frame(height: state.notchHeight)
