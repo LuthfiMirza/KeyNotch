@@ -95,29 +95,36 @@ Engineered with a **True Zero-Draw** architecture: WindowServer compositing cuts
     - Digital countdown with **SF Pro Rounded** typography and persistent compact progress ring on the notch edge.
     - Instant presets: 25 minutes (Pomodoro), 5 minutes (Short Break), 15 minutes (Long Break).
 
+15. **📈 Live Saham, Forex & Crypto Watcher (Market Tab):**
+    - Dedicated **Market Tab** (`Controls` | `Shelf` | `Notes` | `Market`) built directly into the Dynamic Island.
+    - Real-time quotes for **USD/IDR (Forex)**, **BTC/USD & ETH/USD (Crypto)**, and **BBCA.JK, AAPL, NVDA (Stocks)** with zero API keys required.
+    - Instant category filtering (`All` | `Forex` | `Crypto` | `Stocks`) with color-coded 24h change capsules.
+    - **📌 Pin to Notch**: 1-click pin any currency, crypto, or stock ticker to display live prices directly inside the collapsed notch pill when media is idle.
+    - **Zero-CPU Architecture**: Requests only trigger on-demand via the 🔄 Refresh button or when opening the tab if data is older than 5 minutes.
+
 ---
 
 ### 🛠️ Developer & Power-User Utilities
-14. **🌐 Localhost & Dev Port Monitor:**
+16. **🌐 Localhost & Dev Port Monitor:**
     - Lightweight background socket scanner in the Controls/Dev tab that detects active local development servers (e.g., `:3000`, `:5173`, `:8000`, `:8080`).
     - One-click actions to open the running port in your browser or terminate stuck processes (`kill -9`).
 
-15. **🎨 Quick Screen Color Picker & Camera Mirror:**
+17. **🎨 Quick Screen Color Picker & Camera Mirror:**
     - **Native Loupe**: Pick any pixel color on screen (`NSColorSampler`) and automatically copy its `HEX` / `RGB` / `Tailwind` value to the clipboard.
     - **Webcam Peek**: Instant 1-click camera mirror preview inside the notch to check framing before joining a video call.
 
-16. **🎛️ iOS-Style Control Center & Caffeinate:**
+18. **🎛️ iOS-Style Control Center & Caffeinate:**
     - **Caffeinate Toggle**: One-click native power management assertion (`IOPMAssertionCreateWithName`) to keep your Mac awake during builds, renders, or downloads.
     - Quick status and toggles for **Wi-Fi** (with SSID detection), **Bluetooth**, **Focus / DND**, and an interactive iOS capsule volume scrubber.
 
-17. **⌨️ Global Keyboard Shortcuts (Zero Accessibility Permissions):**
+19. **⌨️ Global Keyboard Shortcuts (Zero Accessibility Permissions):**
     - `Option + Space`: Toggle Expand / Collapse Dynamic Island instantly.
     - `Option + Shift + V`: Paste Next Snippet in Sequential Queue with HUD indicator.
     - `Option + Shift + M`: 1-Click Global Microphone Mute / Unmute.
     - `Option + Shift + C`: Instant Screen Color Picker Loupe.
     - **Dead-Center Balanced Clock**: Mathematically and optically aligned time indicator.
     - **Smart Click Pass-Through**: Transparent areas around the notch let mouse clicks pass straight through to underlying windows.
-    - **Menu Bar Tray Icon (🏝️)**: Left-click to toggle Island; Right-click for quick preferences (**Hover Peek Mode**, Full-Screen Auto-Hide, Clean Plain-Text Sanitizer, Quit).
+    - **Menu Bar Tray Icon (🏝️)**: Left-click to toggle Island; Right-click for quick preferences (**Hover Peek Mode**, Full-Screen Auto-Hide, Clean Plain-Text Sanitizer, Market Ticker in Notch, Quit).
 
 ---
 
@@ -125,7 +132,7 @@ Engineered with a **True Zero-Draw** architecture: WindowServer compositing cuts
 
 - **Operating System**: macOS 12 Monterey or later (Ventura, Sonoma, Sequoia supported).
 - **Architecture**: Universal — Intel (`x86_64`) & Apple Silicon (`arm64`).
-- **Binary Footprint**: Standalone **~824 KB** (Zero third-party dependencies / No Electron / Pure Native).
+- **Binary Footprint**: Standalone **~964 KB** (Zero third-party dependencies / No Electron / Pure Native).
 - **Toolchain**: Apple Command Line Tools (`xcode-select --install`).
 
 ---
