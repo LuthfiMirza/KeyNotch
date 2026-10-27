@@ -22,6 +22,7 @@ public enum HUDType {
     case brightness
     case capsLock
     case battery
+    case bluetooth
     case custom
 }
 
@@ -31,7 +32,9 @@ public struct HUDPayload: Identifiable, Equatable {
     public let title: String
     public let subtitle: String?
     public let iconName: String
-    public let value: Float? // 0.0 ... 1.0 (for sliders)
+    public let value: Float? // 0.0 ... 1.0 (for progress ring or volume slider)
+    public let rightDetail: String?
+    public let customBadgeIcon: String?
     public let isSuccess: Bool
     
     public init(
@@ -40,6 +43,8 @@ public struct HUDPayload: Identifiable, Equatable {
         subtitle: String? = nil,
         iconName: String,
         value: Float? = nil,
+        rightDetail: String? = nil,
+        customBadgeIcon: String? = nil,
         isSuccess: Bool = true
     ) {
         self.type = type
@@ -47,6 +52,8 @@ public struct HUDPayload: Identifiable, Equatable {
         self.subtitle = subtitle
         self.iconName = iconName
         self.value = value
+        self.rightDetail = rightDetail
+        self.customBadgeIcon = customBadgeIcon
         self.isSuccess = isSuccess
     }
     
