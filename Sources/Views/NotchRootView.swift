@@ -5,12 +5,16 @@ public struct NotchRootView: View {
     
     public init() {}
     
+    private var isHiddenOrFullScreen: Bool {
+        state.isHidden || state.shouldHideForFullScreen
+    }
+    
     private var isMicroLip: Bool {
-        state.isHoverPeekMode && !state.isPeeking && !state.isExpanded && state.activeHUD == nil
+        state.isHoverPeekMode && !state.isPeeking && !state.isExpanded && state.activeHUD == nil && !isHiddenOrFullScreen
     }
     
     private var currentWidth: CGFloat {
-        if state.isHidden { return 0 }
+        if isHiddenOrFullScreen { return 0 }
         if state.isExpanded { return 520 }
         if let hud = state.activeHUD {
             if hud.type == .battery || hud.type == .bluetooth {
@@ -25,7 +29,7 @@ public struct NotchRootView: View {
     }
     
     private var currentHeight: CGFloat {
-        if state.isHidden { return 0 }
+        if isHiddenOrFullScreen { return 0 }
         if state.isExpanded { return 240 }
         if let hud = state.activeHUD {
             return (hud.type == .battery || hud.type == .bluetooth) ? 42 : 46
@@ -54,7 +58,7 @@ public struct NotchRootView: View {
     
     public var body: some View {
         VStack(spacing: 0) {
-            if !state.isHidden {
+            if !isHiddenOrFullScreen {
                 ZStack(alignment: .top) {
                     // Background Notch Shape with refined smooth concave shoulders & squircle corners
                     NotchShape(
@@ -99,6 +103,7 @@ public struct NotchRootView: View {
                 .animation(.spring(response: 0.35, dampingFraction: 0.78), value: state.isExpanded)
                 .animation(.spring(response: 0.35, dampingFraction: 0.78), value: state.isPeeking)
                 .animation(.spring(response: 0.35, dampingFraction: 0.78), value: state.activeHUD)
+                .animation(.spring(response: 0.35, dampingFraction: 0.78), value: state.shouldHideForFullScreen)
             }
             
             Spacer(minLength: 0)
