@@ -46,10 +46,31 @@ var currentIsPlaying = false
 var pollTimer: Timer?
 
 func cleanVideoTitle(_ str: String) -> String {
-    var s = str
+    var s = str.trimmingCharacters(in: .whitespacesAndNewlines)
+    
+    // 1. Remove notification badges at the beginning, e.g. "(1) ", "(2) "
+    if let badgeRegex = try? NSRegularExpression(pattern: "^\\([0-9]+\\)\\s*") {
+        let range = NSRange(s.startIndex..., in: s)
+        s = badgeRegex.stringByReplacingMatches(in: s, options: [], range: range, withTemplate: "")
+    }
+    
+    // 2. Remove trailing YouTube suffixes
+    let trailingSuffixes = [
+        " - YouTube", " – YouTube", " — YouTube", " | YouTube",
+        " - topic", " – topic", " — topic",
+        " - Topic", " – Topic", " — Topic"
+    ]
+    for suf in trailingSuffixes {
+        if s.lowercased().hasSuffix(suf.lowercased()) {
+            s = String(s.dropLast(suf.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+    
+    // 3. Remove common noise tags
     let tags = [
         "(Official Video)", "(Official Music Video)", "[Official Video]",
         "[Official Music Video]", "(Official Audio)", "[Official Audio]",
+        "(Official Visualizer)", "[Official Visualizer]",
         "(Lyric Video)", "[Lyric Video]", "(Lyrics Video)", "[Lyrics Video]",
         "(Audio)", "(Video)", "(Visualizer)", "[Visualizer]", "(Live)", "[Live]",
         "(Lyrics)", "[Lyrics]", "(Lyric)", "[Lyric]",
@@ -57,7 +78,8 @@ func cleanVideoTitle(_ str: String) -> String {
         "| lyric video", "| lyrics video", "| official video",
         "(Tiktok Version)", "[Tiktok Version]", "(Speed Up)", "[Speed Up]",
         "(Slowed + Reverb)", "[Slowed + Reverb]", "(Slowed and Reverb)", "[Slowed and Reverb]",
-        "(Remix)", "[Remix]", "(HD)", "[HD]", "(4K)", "[4K]"
+        "(Remix)", "[Remix]", "(HD)", "[HD]", "(4K)", "[4K]", "(4K 60FPS)", "[4K 60FPS]",
+        "| VEVO", "(VEVO)", "[VEVO]"
     ]
     for tag in tags {
         if let r = s.range(of: tag, options: .caseInsensitive) {
@@ -106,15 +128,16 @@ func updateNowPlaying() {
                 hasArtwork = true
             }
             
-            var title = cleanVideoTitle(rawTitle)
+            let preCleanedTitle = cleanVideoTitle(rawTitle)
+            var title = preCleanedTitle
             var artist = rawArtist.isEmpty ? "Unknown Artist" : rawArtist
             
             // Standard YouTube formats:
             // 1. "Artist - Song Title" (e.g. "Phoebe Bridgers - Scott Street")
             var foundSep = false
             for sep in [" - ", " – ", " — "] {
-                if rawTitle.contains(sep) {
-                    let parts = rawTitle.components(separatedBy: sep)
+                if preCleanedTitle.contains(sep) {
+                    let parts = preCleanedTitle.components(separatedBy: sep)
                     if parts.count >= 2 {
                         let artistPart = cleanVideoTitle(parts[0])
                         let titlePart = cleanVideoTitle(parts[1...].joined(separator: sep))

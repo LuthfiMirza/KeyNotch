@@ -85,7 +85,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
             let m = MediaRemoteService.shared
             let l = LyricsService.shared
             let str = "Title: \(m.title)\nArtist: \(m.artist)\nisPlaying: \(m.isPlaying)\nduration: \(m.duration)\nelapsed: \(m.elapsedTime)\nhasMedia: \(m.hasActiveMedia)\nLyricsCount: \(l.lyrics.count)\nLyricsStatus: \(l.statusMessage ?? "none")"
-            try? str.write(toFile: "/Users/mac/.gemini/antigravity-ide/brain/c8af4749-1491-47f8-985b-2b520c92e598/scratch/media_debug.txt", atomically: true, encoding: .utf8)
+            try? str.write(toFile: "/tmp/keynotch_media_debug.txt", atomically: true, encoding: .utf8)
         }
     }
     
