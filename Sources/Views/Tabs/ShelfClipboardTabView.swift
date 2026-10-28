@@ -31,6 +31,7 @@ public struct StagedFile: Identifiable {
 
 public struct ShelfClipboardTabView: View {
     @ObservedObject var clipboard = ClipboardService.shared
+    @ObservedObject var transfer = DownloadTransferService.shared
     @State private var subTab: Int = 0 // 0 = Files Shelf, 1 = Clipboard History, 2 = Sequential Paste Queue
     @State private var stagedFiles: [StagedFile] = []
     @State private var isTargeted: Bool = false
@@ -118,13 +119,34 @@ public struct ShelfClipboardTabView: View {
                 Spacer()
                 
                 // Context Actions
-                if subTab == 0 && !stagedFiles.isEmpty {
-                    Button(action: { stagedFiles.removeAll() }) {
-                        Text("Clear All")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(.white.opacity(0.5))
+                if subTab == 0 {
+                    HStack(spacing: 8) {
+                        Button(action: {
+                            transfer.toggleDemoTransfer()
+                        }) {
+                            HStack(spacing: 3) {
+                                Image(systemName: transfer.isSimulatingDemo ? "stop.circle.fill" : "arrow.down.circle")
+                                    .font(.system(size: 9, weight: .bold))
+                                Text(transfer.isSimulatingDemo ? "Stop Demo" : "Simulate DL")
+                                    .font(.system(size: 9, weight: .medium))
+                            }
+                            .foregroundColor(transfer.isSimulatingDemo ? .orange : Color.cyan)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(transfer.isSimulatingDemo ? Color.orange.opacity(0.18) : Color.cyan.opacity(0.12))
+                            .clipShape(Capsule())
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        
+                        if !stagedFiles.isEmpty {
+                            Button(action: { stagedFiles.removeAll() }) {
+                                Text("Clear All")
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundColor(.white.opacity(0.5))
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
                     }
-                    .buttonStyle(PlainButtonStyle())
                 } else if subTab == 1 {
                     HStack(spacing: 8) {
                         // Plain-Text Sanitizer Toggle
@@ -181,6 +203,11 @@ public struct ShelfClipboardTabView: View {
     
     private var filesShelfView: some View {
         VStack(spacing: 6) {
+            // Live Transfer Card if active download exists
+            if let primary = transfer.primaryTransfer {
+                activeTransferCard(primary)
+            }
+            
             if stagedFiles.isEmpty {
                 // Drop Target Area
                 ZStack {
@@ -194,22 +221,22 @@ public struct ShelfClipboardTabView: View {
                                 .fill(isTargeted ? Color.blue.opacity(0.1) : Color.white.opacity(0.04))
                         )
                     
-                    VStack(spacing: 5) {
+                    VStack(spacing: 4) {
                         Image(systemName: "arrow.down.doc.fill")
-                            .font(.system(size: 24))
+                            .font(.system(size: transfer.primaryTransfer != nil ? 18 : 24))
                             .foregroundColor(isTargeted ? .blue : .white.opacity(0.6))
                         
                         Text("Drag & drop files from Desktop or Finder")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.system(size: 11.5, weight: .medium))
                             .foregroundColor(.white)
                         
                         Text("Instant staging area • Drag out anywhere • Image Convert & OCR")
-                            .font(.system(size: 10))
+                            .font(.system(size: 9.5))
                             .foregroundColor(.white.opacity(0.45))
                     }
-                    .padding(12)
+                    .padding(8)
                 }
-                .frame(height: 125)
+                .frame(height: transfer.primaryTransfer != nil ? 75 : 125)
                 .padding(.horizontal, 14)
                 .onDrop(of: ["public.file-url"], isTargeted: $isTargeted) { providers in
                     handleDrop(providers)
@@ -224,12 +251,113 @@ public struct ShelfClipboardTabView: View {
                     }
                     .padding(.horizontal, 14)
                 }
-                .frame(height: 130)
+                .frame(height: transfer.primaryTransfer != nil ? 78 : 130)
                 .onDrop(of: ["public.file-url"], isTargeted: $isTargeted) { providers in
                     handleDrop(providers)
                 }
             }
         }
+    }
+    
+    // MARK: - 📥 Active Transfer Card
+    private func activeTransferCard(_ item: ActiveTransferItem) -> some View {
+        HStack(spacing: 10) {
+            // Circular Progress Ring & Icon
+            ZStack {
+                Circle()
+                    .stroke(Color.cyan.opacity(0.2), lineWidth: 3)
+                    .frame(width: 32, height: 32)
+                
+                Circle()
+                    .trim(from: 0, to: CGFloat(item.progress))
+                    .stroke(
+                        Color.cyan,
+                        style: StrokeStyle(lineWidth: 3, lineCap: .round)
+                    )
+                    .frame(width: 32, height: 32)
+                    .rotationEffect(.degrees(-90))
+                    .animation(.linear(duration: 0.5), value: item.progress)
+                
+                Image(systemName: item.isAirDrop ? "airdrop" : "arrow.down")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.cyan)
+            }
+            
+            // File Details & Progress Bar
+            VStack(alignment: .leading, spacing: 3) {
+                HStack {
+                    Text(item.filename)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                    
+                    Spacer()
+                    
+                    Text("\(item.percentageString) · \(item.speedString)")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundColor(.cyan)
+                }
+                
+                // Linear Bar
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(Color.white.opacity(0.12))
+                            .frame(height: 4)
+                        
+                        Capsule()
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color.cyan, Color.blue],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .frame(width: max(4, geo.size.width * CGFloat(item.progress)), height: 4)
+                            .animation(.linear(duration: 0.5), value: item.progress)
+                    }
+                }
+                .frame(height: 4)
+                
+                // Metadata
+                HStack {
+                    Text(item.sizeProgressString)
+                        .font(.system(size: 9.5))
+                        .foregroundColor(.white.opacity(0.55))
+                    
+                    Spacer()
+                    
+                    Text(item.timeRemainingString)
+                        .font(.system(size: 9.5))
+                        .foregroundColor(.white.opacity(0.55))
+                }
+            }
+            
+            // Finder Button
+            Button(action: {
+                transfer.revealInFinder(item)
+            }) {
+                Image(systemName: "folder")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.75))
+                    .padding(6)
+                    .background(Color.white.opacity(0.1))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(PlainButtonStyle())
+            .help("Show in Finder")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.white.opacity(0.06))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(Color.cyan.opacity(0.3), lineWidth: 1)
+                )
+        )
+        .padding(.horizontal, 14)
     }
     
     private func stagedFileRow(_ file: StagedFile) -> some View {
