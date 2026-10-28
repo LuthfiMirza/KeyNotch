@@ -2,21 +2,21 @@ import SwiftUI
 import Combine
 
 public enum IslandTab: String, CaseIterable, Identifiable {
-    case music = "Music"
     case controls = "Controls"
+    case music = "Music"
+    case notes = "Reminders"
+    case devices = "Devices"
     case shelf = "Shelf"
-    case notes = "Notes"
-    case market = "Market"
     
     public var id: String { rawValue }
     
     public var iconName: String {
         switch self {
-        case .music: return "music.note"
         case .controls: return "slider.horizontal.3"
-        case .shelf: return "square.and.arrow.down.on.square"
+        case .music: return "music.note"
         case .notes: return "checklist"
-        case .market: return "chart.line.uptrend.xyaxis"
+        case .devices: return "bolt.horizontal.fill"
+        case .shelf: return "tray.and.arrow.down.fill"
         }
     }
 }
