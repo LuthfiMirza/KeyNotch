@@ -9,6 +9,7 @@ public struct ControlsMediaTabView: View {
     @ObservedObject var pomodoro = PomodoroService.shared
     @ObservedObject var bluetooth = BluetoothService.shared
     @ObservedObject var brightness = BrightnessService.shared
+    @ObservedObject var privacy = PrivacyGuardService.shared
     
     @State private var wifiName: String = "Wi-Fi"
     @State private var isWifiOn: Bool = true
@@ -24,7 +25,12 @@ public struct ControlsMediaTabView: View {
     public init() {}
     
     public var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 10) {
+            // MARK: - Privacy Spy Guard Alert Banner (if Camera or Mic active)
+            if privacy.isCameraInUse || privacy.isMicInUse {
+                privacyAlertBanner
+            }
+            
             // MARK: - Row 1: Wi-Fi & Bluetooth (2 Large Cards)
             networkRow
             
@@ -38,8 +44,8 @@ public struct ControlsMediaTabView: View {
             sliderRow
         }
         .padding(.horizontal, 16)
-        .padding(.top, 6)
-        .padding(.bottom, 10)
+        .padding(.top, (privacy.isCameraInUse || privacy.isMicInUse) ? 2 : 6)
+        .padding(.bottom, 8)
         .onAppear {
             refreshWiFi()
             brightness.readCurrentBrightness()
@@ -252,7 +258,24 @@ public struct ControlsMediaTabView: View {
             }
             .frame(maxWidth: .infinity)
             
-            Spacer(minLength: 40)
+            // Center Spy Guard Status / Test Pill
+            Button(action: {
+                privacy.toggleSimulateSpyGuard()
+            }) {
+                HStack(spacing: 3) {
+                    Image(systemName: (privacy.isCameraInUse || privacy.isMicInUse) ? "shield.fill" : "shield")
+                        .font(.system(size: 8.5, weight: .bold))
+                    Text((privacy.isCameraInUse || privacy.isMicInUse) ? "Guarding" : "Spy Guard")
+                        .font(.system(size: 9.5, weight: .semibold))
+                }
+                .foregroundColor((privacy.isCameraInUse || privacy.isMicInUse) ? Color.green : Color.white.opacity(0.45))
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2.5)
+                .background(Color.white.opacity(0.06))
+                .clipShape(Capsule())
+            }
+            .buttonStyle(PlainButtonStyle())
+            .help("Click to test Privacy Spy Guard")
             
             // RAM Metric
             HStack(spacing: 8) {
@@ -273,6 +296,81 @@ public struct ControlsMediaTabView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 2)
+    }
+    
+    // MARK: - Privacy Spy Guard Alert Banner
+    private var privacyAlertBanner: some View {
+        HStack(spacing: 9) {
+            // Pulsing Dot Indicators
+            HStack(spacing: 4) {
+                if privacy.isCameraInUse {
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: 8, height: 8)
+                        .shadow(color: Color.green.opacity(0.8), radius: 3)
+                }
+                if privacy.isMicInUse {
+                    Circle()
+                        .fill(privacy.isMicMuted ? Color.red : Color.orange)
+                        .frame(width: 8, height: 8)
+                        .shadow(color: (privacy.isMicMuted ? Color.red : Color.orange).opacity(0.8), radius: 3)
+                }
+            }
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(privacy.activeAppName)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                
+                Text(privacyStatusText)
+                    .font(.system(size: 9.5))
+                    .foregroundColor(.white.opacity(0.65))
+            }
+            
+            Spacer()
+            
+            // 1-Click Mute Mic
+            if privacy.isMicInUse {
+                Button(action: {
+                    privacy.toggleMute()
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: privacy.isMicMuted ? "mic.slash.fill" : "mic.fill")
+                            .font(.system(size: 9, weight: .bold))
+                        Text(privacy.isMicMuted ? "Unmute" : "Mute Mic")
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .background(privacy.isMicMuted ? Color.red : Color.orange)
+                    .clipShape(Capsule())
+                    .shadow(color: (privacy.isMicMuted ? Color.red : Color.orange).opacity(0.4), radius: 3)
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.white.opacity(0.08))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke((privacy.isCameraInUse ? Color.green : Color.orange).opacity(0.35), lineWidth: 1)
+                )
+        )
+    }
+    
+    private var privacyStatusText: String {
+        if privacy.isCameraInUse && privacy.isMicInUse {
+            return privacy.isMicMuted ? "Camera active • Mic muted" : "Camera & Microphone active"
+        } else if privacy.isCameraInUse {
+            return "Camera is currently recording"
+        } else {
+            return privacy.isMicMuted ? "Microphone input is muted" : "Microphone is capturing audio"
+        }
     }
     
     // MARK: - Row 4: Full-Width Capsule Slider
