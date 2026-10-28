@@ -50,6 +50,8 @@ cat << 'EOF' > "${CONTENTS_DIR}/Info.plist"
     <string>KeyNotch uses your camera for quick video call framing mirror preview.</string>
     <key>NSBluetoothAlwaysUsageDescription</key>
     <string>KeyNotch monitors Bluetooth peripheral status for the Control Center widget.</string>
+    <key>NSCalendarsUsageDescription</key>
+    <string>KeyNotch displays your upcoming meetings and provides 1-click join in the notch.</string>
 </dict>
 </plist>
 EOF
@@ -79,6 +81,7 @@ swiftc \
     -framework AudioToolbox \
     -framework AVFoundation \
     -framework IOBluetooth \
+    -framework EventKit \
     ${SWIFT_FILES} \
     -o "${BINARY_PATH}"
 
