@@ -3,6 +3,7 @@ import SwiftUI
 public struct NotchRootView: View {
     @ObservedObject var state = IslandState.shared
     @ObservedObject var lyrics = LyricsService.shared
+    @ObservedObject var transfer = DownloadTransferService.shared
     
     public init() {}
     
@@ -94,6 +95,30 @@ public struct NotchRootView: View {
                             topShoulderRadius: currentShoulderRadius
                         )
                         .stroke(Color.white.opacity(0.14), lineWidth: 1)
+                    )
+                    .overlay(
+                        Group {
+                            if let dl = transfer.primaryTransfer {
+                                NotchShape(
+                                    cornerRadius: currentCornerRadius,
+                                    topShoulderRadius: currentShoulderRadius
+                                )
+                                .trim(from: 0, to: CGFloat(dl.progress))
+                                .stroke(
+                                    LinearGradient(
+                                        colors: [
+                                            Color(red: 0.18, green: 0.65, blue: 1.0),
+                                            Color(red: 0.35, green: 0.85, blue: 0.95)
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    style: StrokeStyle(lineWidth: 1.8, lineCap: .round)
+                                )
+                                .shadow(color: Color(red: 0.18, green: 0.65, blue: 1.0).opacity(0.7), radius: 3)
+                                .animation(.linear(duration: 0.5), value: dl.progress)
+                            }
+                        }
                     )
                         .shadow(
                             color: Color.black.opacity(state.isExpanded ? 0.5 : 0.25),

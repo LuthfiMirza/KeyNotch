@@ -10,6 +10,7 @@ public struct CompactNotchView: View {
     @ObservedObject var network = NetworkMonitorService.shared
     @ObservedObject var market = MarketTickerService.shared
     @ObservedObject var calendar = CalendarMeetingService.shared
+    @ObservedObject var transfer = DownloadTransferService.shared
     
     @State private var currentTime: String = ""
     @State private var clockTimer: AnyCancellable?
@@ -21,8 +22,9 @@ public struct CompactNotchView: View {
         return formatter
     }()
     
-    // Vibrant Activity Ring Green
+    // Vibrant Activity Ring Green & Cyan Download Blue
     private let ringColor = Color(red: 0.18, green: 0.86, blue: 0.44)
+    private let downloadColor = Color(red: 0.18, green: 0.65, blue: 1.0)
     
     private var pingColor: Color {
         switch network.pingQuality {
@@ -45,7 +47,7 @@ public struct CompactNotchView: View {
     
     public var body: some View {
         HStack(spacing: 0) {
-            // MARK: - Left: Circular Progress Ring OR Active Microphone Privacy Radar
+            // MARK: - Left: Circular Progress Ring OR Active Microphone Privacy Radar OR Download Ring
             HStack {
                 if mic.isMicInUse {
                     Button(action: {
@@ -61,6 +63,26 @@ public struct CompactNotchView: View {
                         }
                     }
                     .buttonStyle(PlainButtonStyle())
+                } else if let dl = transfer.primaryTransfer {
+                    // Live Download / AirDrop Progress Ring
+                    ZStack {
+                        Circle()
+                            .stroke(downloadColor.opacity(0.25), lineWidth: 3.5)
+                        
+                        Circle()
+                            .trim(from: 0, to: CGFloat(dl.progress))
+                            .stroke(
+                                downloadColor,
+                                style: StrokeStyle(lineWidth: 3.5, lineCap: .round)
+                            )
+                            .rotationEffect(.degrees(-90))
+                            .animation(.linear(duration: 0.4), value: dl.progress)
+                        
+                        Image(systemName: dl.isAirDrop ? "airdrop" : "arrow.down")
+                            .font(.system(size: 7.5, weight: .bold))
+                            .foregroundColor(downloadColor)
+                    }
+                    .frame(width: 17, height: 17)
                 } else {
                     ZStack {
                         // Track
@@ -93,7 +115,7 @@ public struct CompactNotchView: View {
             
             Spacer(minLength: 0)
             
-            // MARK: - Right: Imminent Meeting OR Reactive Waveform OR Compact Network/Market Pill
+            // MARK: - Right: Imminent Meeting OR Live Download OR Reactive Waveform OR Network/Market Pill
             HStack {
                 if let meeting = calendar.nextMeeting, meeting.isImminent {
                     HStack(spacing: 4) {
@@ -101,6 +123,16 @@ public struct CompactNotchView: View {
                             .fill(meeting.isOngoing ? Color.orange : Color.green)
                             .frame(width: 5, height: 5)
                         Text("\(meeting.platform.shortName) \(meeting.timeUntilString)")
+                            .font(.system(size: 9, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                    }
+                } else if let dl = transfer.primaryTransfer {
+                    HStack(spacing: 3) {
+                        Image(systemName: dl.isAirDrop ? "airdrop" : "arrow.down.circle.fill")
+                            .font(.system(size: 8.5, weight: .bold))
+                            .foregroundColor(downloadColor)
+                        Text("\(dl.percentageString) · \(dl.speedString)")
                             .font(.system(size: 9, weight: .bold, design: .rounded))
                             .foregroundColor(.white)
                             .lineLimit(1)
@@ -141,7 +173,7 @@ public struct CompactNotchView: View {
                     )
                 }
             }
-            .frame(width: (calendar.nextMeeting?.isImminent == true || (!media.isPlaying && (market.showTickerInCompactNotch || network.showInCompactNotch))) ? 78 : 48, alignment: .trailing)
+            .frame(width: (transfer.primaryTransfer != nil || calendar.nextMeeting?.isImminent == true || (!media.isPlaying && (market.showTickerInCompactNotch || network.showInCompactNotch))) ? 84 : 48, alignment: .trailing)
             .padding(.trailing, 14)
         }
         .frame(height: state.notchHeight)
