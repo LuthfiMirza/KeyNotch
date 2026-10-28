@@ -11,6 +11,7 @@ public struct CompactNotchView: View {
     @ObservedObject var market = MarketTickerService.shared
     @ObservedObject var calendar = CalendarMeetingService.shared
     @ObservedObject var transfer = DownloadTransferService.shared
+    @ObservedObject var privacy = PrivacyGuardService.shared
     
     @State private var currentTime: String = ""
     @State private var clockTimer: AnyCancellable?
@@ -47,17 +48,51 @@ public struct CompactNotchView: View {
     
     public var body: some View {
         HStack(spacing: 0) {
-            // MARK: - Left: Circular Progress Ring OR Active Microphone Privacy Radar OR Download Ring
+            // MARK: - Left: Privacy Spy Guard (Camera/Mic) OR Download Ring OR Battery/Pomodoro Ring
             HStack {
-                if mic.isMicInUse {
+                if privacy.isCameraInUse && privacy.isMicInUse {
+                    // Dual Spy Guard Dot: Green Camera + Orange/Red Mic
                     Button(action: {
-                        mic.toggleMute()
+                        privacy.toggleMute()
+                    }) {
+                        HStack(spacing: 3.5) {
+                            Circle()
+                                .fill(Color.green)
+                                .frame(width: 6, height: 6)
+                                .shadow(color: Color.green.opacity(0.8), radius: 2)
+                            Circle()
+                                .fill(privacy.isMicMuted ? Color.red : Color.orange)
+                                .frame(width: 6, height: 6)
+                                .shadow(color: (privacy.isMicMuted ? Color.red : Color.orange).opacity(0.8), radius: 2)
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3.5)
+                        .background(Color.white.opacity(0.12))
+                        .clipShape(Capsule())
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                } else if privacy.isCameraInUse {
+                    // Camera Spy Indicator: Green Dot
+                    ZStack {
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 17, height: 17)
+                            .shadow(color: Color.green.opacity(0.6), radius: 3)
+                        Image(systemName: "video.fill")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundColor(.black)
+                    }
+                } else if privacy.isMicInUse {
+                    // Microphone Spy Indicator: Orange/Red Dot
+                    Button(action: {
+                        privacy.toggleMute()
                     }) {
                         ZStack {
                             Circle()
-                                .fill(mic.isMuted ? Color.red : Color.orange)
+                                .fill(privacy.isMicMuted ? Color.red : Color.orange)
                                 .frame(width: 17, height: 17)
-                            Image(systemName: mic.isMuted ? "mic.slash.fill" : "mic.fill")
+                                .shadow(color: (privacy.isMicMuted ? Color.red : Color.orange).opacity(0.6), radius: 3)
+                            Image(systemName: privacy.isMicMuted ? "mic.slash.fill" : "mic.fill")
                                 .font(.system(size: 8.5, weight: .bold))
                                 .foregroundColor(.white)
                         }
@@ -115,7 +150,7 @@ public struct CompactNotchView: View {
             
             Spacer(minLength: 0)
             
-            // MARK: - Right: Imminent Meeting OR Live Download OR Reactive Waveform OR Network/Market Pill
+            // MARK: - Right: Imminent Meeting OR Live Download OR Active Privacy App OR Waveform
             HStack {
                 if let meeting = calendar.nextMeeting, meeting.isImminent {
                     HStack(spacing: 4) {
@@ -135,6 +170,16 @@ public struct CompactNotchView: View {
                         Text("\(dl.percentageString) · \(dl.speedString)")
                             .font(.system(size: 9, weight: .bold, design: .rounded))
                             .foregroundColor(.white)
+                            .lineLimit(1)
+                    }
+                } else if privacy.isCameraInUse || privacy.isMicInUse {
+                    HStack(spacing: 3.5) {
+                        Circle()
+                            .fill(privacy.isCameraInUse ? Color.green : (privacy.isMicMuted ? Color.red : Color.orange))
+                            .frame(width: 5, height: 5)
+                        Text(privacy.activeAppName)
+                            .font(.system(size: 9, weight: .bold, design: .rounded))
+                            .foregroundColor(.white.opacity(0.95))
                             .lineLimit(1)
                     }
                 } else if media.isPlaying {
@@ -173,7 +218,7 @@ public struct CompactNotchView: View {
                     )
                 }
             }
-            .frame(width: (transfer.primaryTransfer != nil || calendar.nextMeeting?.isImminent == true || (!media.isPlaying && (market.showTickerInCompactNotch || network.showInCompactNotch))) ? 84 : 48, alignment: .trailing)
+            .frame(width: (privacy.isCameraInUse || privacy.isMicInUse || transfer.primaryTransfer != nil || calendar.nextMeeting?.isImminent == true || (!media.isPlaying && (market.showTickerInCompactNotch || network.showInCompactNotch))) ? 84 : 48, alignment: .trailing)
             .padding(.trailing, 14)
         }
         .frame(height: state.notchHeight)
