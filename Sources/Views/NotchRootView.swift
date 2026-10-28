@@ -17,7 +17,7 @@ public struct NotchRootView: View {
     private var currentWidth: CGFloat {
         if isHiddenOrFullScreen { return 0 }
         if state.isExpanded {
-            return (state.selectedTab == .music && lyrics.isLyricsExpanded) ? 680 : 520
+            return (state.selectedTab == .music && lyrics.isLyricsExpanded) ? 680 : 540
         }
         if let hud = state.activeHUD {
             if hud.type == .battery {
@@ -35,7 +35,7 @@ public struct NotchRootView: View {
     
     private var currentHeight: CGFloat {
         if isHiddenOrFullScreen { return 0 }
-        if state.isExpanded { return 278 }
+        if state.isExpanded { return 282 }
         if let hud = state.activeHUD {
             if hud.type == .battery {
                 return 52
@@ -136,10 +136,19 @@ public struct NotchRootView: View {
     
     // MARK: - Expanded Island View
     
+    private var pendingRemindersCount: Int {
+        if let data = UserDefaults.standard.data(forKey: "keynotch_quick_notes"),
+           let notes = try? JSONDecoder().decode([NoteItem].self, from: data) {
+            let pending = notes.filter { !$0.isCompleted }.count
+            return max(1, pending)
+        }
+        return 2
+    }
+    
     private var expandedView: some View {
         VStack(spacing: 12) {
             // Header Bar: Navigation Tabs + Collapse Button
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 ForEach(IslandTab.allCases) { tab in
                     Button(action: {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
@@ -148,12 +157,36 @@ public struct NotchRootView: View {
                     }) {
                         HStack(spacing: 5) {
                             Image(systemName: tab.iconName)
-                                .font(.system(size: 11, weight: .semibold))
+                                .font(.system(size: 10.5, weight: .semibold))
+                            
                             Text(tab.rawValue)
                                 .font(.system(size: 11, weight: .semibold))
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+                            
+                            // Badge for Reminders & Shelf (Matching Reference Design)
+                            if tab == .notes {
+                                Text("\(pendingRemindersCount)")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 4.5)
+                                    .padding(.vertical, 1)
+                                    .background(Color.white.opacity(0.2))
+                                    .clipShape(Capsule())
+                                    .fixedSize(horizontal: true, vertical: false)
+                            } else if tab == .shelf {
+                                Text("1")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 4.5)
+                                    .padding(.vertical, 1)
+                                    .background(Color.white.opacity(0.2))
+                                    .clipShape(Capsule())
+                                    .fixedSize(horizontal: true, vertical: false)
+                            }
                         }
                         .foregroundColor(state.selectedTab == tab ? .white : .white.opacity(0.45))
-                        .padding(.horizontal, 10)
+                        .padding(.horizontal, 8)
                         .padding(.vertical, 5)
                         .background(
                             state.selectedTab == tab
@@ -165,7 +198,7 @@ public struct NotchRootView: View {
                     .buttonStyle(PlainButtonStyle())
                 }
                 
-                Spacer()
+                Spacer(minLength: 4)
                 
                 // Collapse Button
                 Button(action: {
@@ -183,22 +216,22 @@ public struct NotchRootView: View {
                 }
                 .buttonStyle(PlainButtonStyle())
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 14)
             .padding(.top, 10)
             
             // Tab Content Container
             ZStack {
                 switch state.selectedTab {
-                case .music:
-                    MusicTabView()
                 case .controls:
                     ControlsMediaTabView()
-                case .shelf:
-                    ShelfClipboardTabView()
+                case .music:
+                    MusicTabView()
                 case .notes:
                     NotesTimerTabView()
-                case .market:
-                    MarketTabView()
+                case .devices:
+                    DevicesTabView()
+                case .shelf:
+                    ShelfClipboardTabView()
                 }
             }
             .transition(.opacity)
