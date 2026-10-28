@@ -34,17 +34,16 @@ public struct CapsuleSliderView: View {
                 // Content Overlay: Speaker Icon & Label
                 HStack(spacing: 8) {
                     Image(systemName: dynamicIconName())
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(value > 0.15 ? .black : .white.opacity(0.85))
-                        .frame(width: 24)
-                        .padding(.leading, 8)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(value > 0.08 ? Color.black.opacity(0.85) : Color.white)
+                        .padding(.leading, 14)
                     
                     Spacer()
                     
                     Text("\(Int(value * 100))%")
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
-                        .foregroundColor(value > 0.85 ? .black : .white.opacity(0.85))
-                        .padding(.trailing, 10)
+                        .font(.system(size: 12.5, weight: .bold, design: .rounded))
+                        .foregroundColor(value > 0.88 ? Color.black.opacity(0.85) : Color.white)
+                        .padding(.trailing, 16)
                 }
             }
             .contentShape(Rectangle())
@@ -57,7 +56,7 @@ public struct CapsuleSliderView: View {
                     }
             )
         }
-        .frame(height: 32)
+        .frame(height: 38)
     }
     
     private func dynamicIconName() -> String {

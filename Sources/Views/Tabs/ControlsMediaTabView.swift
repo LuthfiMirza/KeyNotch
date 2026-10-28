@@ -2,438 +2,317 @@ import SwiftUI
 import CoreWLAN
 
 public struct ControlsMediaTabView: View {
-    @ObservedObject var media = MediaRemoteService.shared
     @ObservedObject var telemetry = SystemTelemetryService.shared
     @ObservedObject var battery = BatteryService.shared
     @ObservedObject var caffeinate = CaffeinateService.shared
     @ObservedObject var hud = HUDInterceptorService.shared
-    @ObservedObject var devTools = DevToolsService.shared
-    @ObservedObject var mic = MicrophoneService.shared
-    @ObservedObject var network = NetworkMonitorService.shared
+    @ObservedObject var pomodoro = PomodoroService.shared
+    @ObservedObject var bluetooth = BluetoothService.shared
     @ObservedObject var brightness = BrightnessService.shared
     
     @State private var wifiName: String = "Wi-Fi"
-    @State private var isFocusActive: Bool = false
+    @State private var isWifiOn: Bool = true
     @State private var isBluetoothOn: Bool = true
+    @State private var isFocusActive: Bool = false
+    @State private var activeSliderMode: SliderMode = .volume
     
-    private var pingColor: Color {
-        switch network.pingQuality {
-        case .excellent, .good: return .green
-        case .fair: return .yellow
-        case .poor: return .red
-        case .unknown: return .gray
-        }
+    public enum SliderMode {
+        case volume
+        case brightness
     }
     
     public init() {}
     
     public var body: some View {
-        VStack(spacing: 10) {
-            // MARK: - 1. Dual Sliders: Display Brightness & Sound Volume
-            slidersSection
+        VStack(spacing: 12) {
+            // MARK: - Row 1: Wi-Fi & Bluetooth (2 Large Cards)
+            networkRow
             
-            // MARK: - 2. Quick Toggles Matrix (Wi-Fi, Bluetooth, Mute, Caffeinate, Focus)
-            quickTogglesSection
+            // MARK: - Row 2: Focus, Awake, Timer (3 Medium Cards)
+            togglesRow
             
-            // MARK: - 3. Mini Now Playing Shortcut (if active)
-            if media.hasActiveMedia || !media.title.isEmpty {
-                nowPlayingShortcutBar
-            }
+            // MARK: - Row 3: CPU & RAM Telemetry Bar
+            telemetryRow
             
-            // MARK: - 4. Mach Kernel System Stats & Battery Strip
-            systemTelemetryStrip
-            
-            // MARK: - 5. Dev Tools Strip (Ports & Native Color Picker)
-            devToolsStrip
+            // MARK: - Row 4: Full-Width Capsule Slider (Volume / Brightness)
+            sliderRow
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 4)
+        .padding(.horizontal, 16)
+        .padding(.top, 6)
+        .padding(.bottom, 10)
         .onAppear {
             refreshWiFi()
             brightness.readCurrentBrightness()
-            devTools.scanActivePorts()
+            hud.readCurrentVolume()
         }
     }
     
-    // MARK: - 1. Dual Sliders (Display Brightness & Sound Volume)
+    // MARK: - Row 1: Wi-Fi & Bluetooth (2 Large Squircle Cards)
     
-    private var slidersSection: some View {
-        HStack(spacing: 8) {
-            // Display Brightness Slider
-            CapsuleSliderView(
-                value: Binding(
-                    get: { brightness.currentBrightness },
-                    set: { brightness.setBrightness($0) }
-                ),
-                iconName: "sun.max.fill"
-            ) { newBrightness in
-                brightness.setBrightness(newBrightness)
-            }
-            
-            // Sound Volume Slider
-            CapsuleSliderView(
-                value: Binding(
-                    get: { hud.currentVolume },
-                    set: { hud.setSystemVolume($0) }
-                ),
-                iconName: "speaker.wave.3.fill"
-            ) { newVolume in
-                hud.setSystemVolume(newVolume)
-            }
-        }
-    }
-    
-    // MARK: - 2. Quick Toggles Matrix (Wi-Fi, Bluetooth, Mute, Caffeinate, Focus)
-    
-    private var quickTogglesSection: some View {
-        HStack(spacing: 6) {
-            // Wi-Fi Button
+    private var networkRow: some View {
+        HStack(spacing: 12) {
+            // Wi-Fi Card
             Button(action: {
                 refreshWiFi()
             }) {
-                HStack(spacing: 5) {
-                    Image(systemName: "wifi")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(.blue)
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(isWifiOn ? Color.blue : Color.white.opacity(0.15))
+                            .frame(width: 36, height: 36)
+                        Image(systemName: "wifi")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.white)
+                    }
                     
-                    Text(wifiName)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.white)
-                        .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Wi-Fi")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(.white)
+                        Text(wifiName)
+                            .font(.system(size: 11, weight: .regular))
+                            .foregroundColor(.white.opacity(0.65))
+                            .lineLimit(1)
+                    }
+                    Spacer()
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity)
                 .background(Color.white.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
             .buttonStyle(PlainButtonStyle())
             
-            // Bluetooth Button
+            // Bluetooth Card
             Button(action: {
                 isBluetoothOn.toggle()
             }) {
-                HStack(spacing: 5) {
-                    Image(systemName: "wave.3.forward")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(isBluetoothOn ? .blue : .gray)
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(isBluetoothOn ? Color.blue : Color.white.opacity(0.15))
+                            .frame(width: 36, height: 36)
+                        Image(systemName: "wave.3.forward")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(.white)
+                    }
                     
-                    Text(isBluetoothOn ? "Bluetooth On" : "Bluetooth Off")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.white)
-                        .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Bluetooth")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(.white)
+                        Text(bluetoothSubtitle)
+                            .font(.system(size: 11, weight: .regular))
+                            .foregroundColor(.white.opacity(0.65))
+                            .lineLimit(1)
+                    }
+                    Spacer()
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity)
                 .background(Color.white.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
             .buttonStyle(PlainButtonStyle())
-            
-            // Microphone Privacy & Global Mute Button
+        }
+    }
+    
+    private var bluetoothSubtitle: String {
+        if !isBluetoothOn { return "Off" }
+        if let first = bluetooth.connectedDevices.first {
+            return first
+        }
+        return "On"
+    }
+    
+    // MARK: - Row 2: Focus, Awake, Timer (3 Medium Squircle Cards)
+    
+    private var togglesRow: some View {
+        HStack(spacing: 10) {
+            // Focus Card
             Button(action: {
-                mic.toggleMute()
-            }) {
-                HStack(spacing: 5) {
-                    Image(systemName: mic.isMuted ? "mic.slash.fill" : (mic.isMicInUse ? "mic.fill" : "mic"))
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(mic.isMuted ? .red : (mic.isMicInUse ? .orange : .white.opacity(0.6)))
-                    
-                    Text(mic.isMuted ? "Muted" : (mic.isMicInUse ? "Mic Live" : "Mic On"))
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.white)
-                        .lineLimit(1)
+                withAnimation(.spring(response: 0.25, dampingFraction: 0.75)) {
+                    isFocusActive.toggle()
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
-                .background(
-                    mic.isMuted
-                    ? Color.red.opacity(0.22)
-                    : (mic.isMicInUse ? Color.orange.opacity(0.22) : Color.white.opacity(0.08))
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }) {
+                HStack(spacing: 9) {
+                    ZStack {
+                        Circle()
+                            .fill(isFocusActive ? Color.indigo : Color.white.opacity(0.12))
+                            .frame(width: 30, height: 30)
+                        Image(systemName: "moon.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.white)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Focus")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.white)
+                        Text(isFocusActive ? "On" : "Off")
+                            .font(.system(size: 10.5, weight: .medium))
+                            .foregroundColor(.white.opacity(0.6))
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 9)
+                .frame(maxWidth: .infinity)
+                .background(Color.white.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
             .buttonStyle(PlainButtonStyle())
             
-            // Caffeinate Toggle Button
+            // Awake Card (Caffeinate)
             Button(action: {
                 caffeinate.toggle()
             }) {
-                HStack(spacing: 5) {
-                    Image(systemName: caffeinate.isCaffeinated ? "cup.and.saucer.fill" : "cup.and.saucer")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(caffeinate.isCaffeinated ? .orange : .white.opacity(0.6))
+                HStack(spacing: 9) {
+                    ZStack {
+                        Circle()
+                            .fill(caffeinate.isCaffeinated ? Color.orange : Color.white.opacity(0.12))
+                            .frame(width: 30, height: 30)
+                        Image(systemName: "cup.and.saucer.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.white)
+                    }
                     
-                    Text(caffeinate.isCaffeinated ? "Awake" : "Caffeinate")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.white)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Awake")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.white)
+                        Text(caffeinate.isCaffeinated ? "Active" : "Normal")
+                            .font(.system(size: 10.5, weight: .medium))
+                            .foregroundColor(.white.opacity(0.6))
+                    }
+                    Spacer(minLength: 0)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
-                .background(
-                    caffeinate.isCaffeinated
-                    ? Color.orange.opacity(0.25)
-                    : Color.white.opacity(0.08)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 9)
+                .frame(maxWidth: .infinity)
+                .background(Color.white.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
             .buttonStyle(PlainButtonStyle())
             
-            // Focus / DND Button
+            // Timer Card (Pomodoro)
             Button(action: {
-                isFocusActive.toggle()
+                pomodoro.toggle()
             }) {
-                HStack(spacing: 5) {
-                    Image(systemName: isFocusActive ? "moon.fill" : "moon")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(isFocusActive ? .indigo : .white.opacity(0.6))
+                HStack(spacing: 9) {
+                    ZStack {
+                        Circle()
+                            .fill(pomodoro.isRunning ? Color.green : Color.white.opacity(0.12))
+                            .frame(width: 30, height: 30)
+                        Image(systemName: "timer")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.white)
+                    }
                     
-                    Text(isFocusActive ? "Focus On" : "Focus")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.white)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Timer")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.white)
+                        Text(pomodoro.isRunning ? pomodoro.formattedTime : "25m")
+                            .font(.system(size: 10.5, weight: .medium))
+                            .foregroundColor(.white.opacity(0.6))
+                    }
+                    Spacer(minLength: 0)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
-                .background(
-                    isFocusActive
-                    ? Color.indigo.opacity(0.25)
-                    : Color.white.opacity(0.08)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 9)
+                .frame(maxWidth: .infinity)
+                .background(Color.white.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
             .buttonStyle(PlainButtonStyle())
         }
     }
     
-    // MARK: - 3. Mini Now Playing Shortcut Bar
+    // MARK: - Row 3: CPU & RAM Telemetry Bar
     
-    private var nowPlayingShortcutBar: some View {
-        Button(action: {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                IslandState.shared.selectedTab = .music
-            }
-        }) {
+    private var telemetryRow: some View {
+        HStack {
+            // CPU Metric
             HStack(spacing: 8) {
-                Image(systemName: "music.note")
-                    .font(.system(size: 10, weight: .bold))
+                Image(systemName: "cpu")
+                    .font(.system(size: 13, weight: .bold))
                     .foregroundColor(.green)
-                
-                Text(media.title + (media.artist.isEmpty ? "" : " · \(media.artist)"))
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.9))
-                    .lineLimit(1)
+                Text("CPU")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.white)
                 
                 Spacer()
                 
-                if media.isPlaying {
-                    WaveformView(isPlaying: true, color: .green, barCount: 4, maxHeight: 9)
-                }
-                
-                Text("Open Player →")
-                    .font(.system(size: 9.5, weight: .bold, design: .rounded))
-                    .foregroundColor(.white.opacity(0.55))
+                Text(String(format: "%.0f%%", telemetry.cpuUsagePercent))
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(Color.white.opacity(0.06))
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-    
-    // MARK: - System Telemetry Strip
-    
-    private var systemTelemetryStrip: some View {
-        HStack(spacing: 6) {
-            // CPU Pill
-            HStack(spacing: 4) {
-                Image(systemName: "cpu")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundColor(.cyan)
-                
-                Text(String(format: "CPU: %.1f%%", telemetry.cpuUsagePercent))
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                    .foregroundColor(.white.opacity(0.9))
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(Color.white.opacity(0.07))
-            .clipShape(Capsule())
+            .frame(maxWidth: .infinity)
             
-            // RAM Pill
-            HStack(spacing: 4) {
+            Spacer(minLength: 40)
+            
+            // RAM Metric
+            HStack(spacing: 8) {
                 Image(systemName: "memorychip")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundColor(.purple)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.blue)
+                Text("RAM")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.white)
                 
-                Text(telemetry.ramUsageString)
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                    .foregroundColor(.white.opacity(0.9))
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(Color.white.opacity(0.07))
-            .clipShape(Capsule())
-            
-            // Network Speedometer Pill (Download & Upload)
-            HStack(spacing: 5) {
-                HStack(spacing: 2) {
-                    Image(systemName: "arrow.down")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundColor(.green)
-                    Text(network.downloadSpeedString)
-                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                        .foregroundColor(.white.opacity(0.9))
-                }
+                Spacer()
                 
-                HStack(spacing: 2) {
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundColor(.blue)
-                    Text(network.uploadSpeedString)
-                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                        .foregroundColor(.white.opacity(0.9))
-                }
+                Text(String(format: "%.1f/%.0fGB", telemetry.usedRAMGB, telemetry.totalRAMGB))
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
             }
-            .padding(.horizontal, 7)
-            .padding(.vertical, 4)
-            .background(Color.white.opacity(0.07))
-            .clipShape(Capsule())
-            
-            // Ping Radar Pill
-            Button(action: {
-                network.sampleNetwork()
-            }) {
-                HStack(spacing: 3) {
-                    Circle()
-                        .fill(pingColor)
-                        .frame(width: 5, height: 5)
-                    Text(network.pingString)
-                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                        .foregroundColor(.white.opacity(0.9))
-                }
-                .padding(.horizontal, 7)
-                .padding(.vertical, 4)
-                .background(Color.white.opacity(0.07))
-                .clipShape(Capsule())
-            }
-            .buttonStyle(PlainButtonStyle())
-            
-            Spacer()
-            
-            // Battery & MagSafe Indicator
-            HStack(spacing: 3) {
-                Image(systemName: battery.isCharging || battery.isConnectedToAC ? "bolt.fill" : "battery.75")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundColor(battery.batteryPercentage <= 20 ? .red : (battery.isCharging ? .green : .white))
-                
-                Text("\(battery.batteryPercentage)%")
-                    .font(.system(size: 9, weight: .bold, design: .rounded))
-                    .foregroundColor(.white.opacity(0.9))
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-                battery.isCharging
-                ? Color.green.opacity(0.2)
-                : Color.white.opacity(0.07)
-            )
-            .clipShape(Capsule())
+            .frame(maxWidth: .infinity)
         }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 2)
     }
     
-
+    // MARK: - Row 4: Full-Width Capsule Slider
     
-    // MARK: - Dev Tools Strip (Color Picker & Active Ports)
-    
-    private var devToolsStrip: some View {
-        HStack(spacing: 8) {
-            // Color Picker Button
-            Button(action: {
-                devTools.pickColor()
-            }) {
-                HStack(spacing: 4) {
-                    Image(systemName: "eyedropper.halffull")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(.pink)
-                    Text(devTools.lastPickedHex ?? "Pick Color")
-                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                        .foregroundColor(.white)
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(Color.white.opacity(0.08))
-                .clipShape(Capsule())
-            }
-            .buttonStyle(PlainButtonStyle())
-            
-            // Active Dev Ports
-            if devTools.activePorts.isEmpty {
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(Color.gray.opacity(0.5))
-                        .frame(width: 4, height: 4)
-                    Text("No dev servers")
-                        .font(.system(size: 9))
-                        .foregroundColor(.white.opacity(0.4))
-                }
-            } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 5) {
-                        ForEach(devTools.activePorts) { port in
-                            HStack(spacing: 3) {
-                                Circle()
-                                    .fill(Color.green)
-                                    .frame(width: 4, height: 4)
-                                Text(":\(String(port.port))")
-                                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                                    .foregroundColor(.white)
-                                
-                                Button(action: { devTools.openPort(port.port) }) {
-                                    Image(systemName: "arrow.up.right")
-                                        .font(.system(size: 7, weight: .bold))
-                                        .foregroundColor(.cyan)
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                                
-                                Button(action: { devTools.killProcess(pid: port.pid, port: port.port) }) {
-                                    Image(systemName: "xmark")
-                                        .font(.system(size: 7, weight: .bold))
-                                        .foregroundColor(.red.opacity(0.8))
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                            }
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.white.opacity(0.08))
-                            .clipShape(Capsule())
-                        }
+    private var sliderRow: some View {
+        CapsuleSliderView(
+            value: Binding(
+                get: {
+                    activeSliderMode == .volume ? hud.currentVolume : brightness.currentBrightness
+                },
+                set: { val in
+                    if activeSliderMode == .volume {
+                        hud.setSystemVolume(val)
+                    } else {
+                        brightness.setBrightness(val)
                     }
                 }
+            ),
+            iconName: activeSliderMode == .volume ? "speaker.wave.2.fill" : "sun.max.fill"
+        ) { newVal in
+            if activeSliderMode == .volume {
+                hud.setSystemVolume(newVal)
+            } else {
+                brightness.setBrightness(newVal)
             }
-            
-            Spacer()
-            
-            // Refresh Ports Button
-            Button(action: { devTools.scanActivePorts() }) {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 8, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.5))
-            }
-            .buttonStyle(PlainButtonStyle())
         }
+        .frame(height: 38)
     }
+    
+    // MARK: - Helper Methods
     
     private func refreshWiFi() {
         if let interface = CWWiFiClient.shared().interface() {
             if let ssid = interface.ssid(), !ssid.isEmpty {
                 self.wifiName = ssid
+                self.isWifiOn = true
             } else {
-                self.wifiName = interface.powerOn() ? "Wi-Fi On" : "Wi-Fi Off"
+                let p = interface.powerOn()
+                self.isWifiOn = p
+                self.wifiName = p ? "Wi-Fi On" : "Wi-Fi Off"
             }
         } else {
             self.wifiName = "Wi-Fi"
