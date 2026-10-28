@@ -23,6 +23,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         _ = MarketTickerService.shared
         _ = CalendarMeetingService.shared
         _ = DownloadTransferService.shared
+        _ = PrivacyGuardService.shared
         
         // Setup Menu Bar Tray Icon
         setupStatusItem()
