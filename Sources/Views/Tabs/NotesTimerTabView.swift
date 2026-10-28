@@ -15,6 +15,7 @@ public struct NoteItem: Identifiable, Codable, Equatable {
 
 public struct NotesTimerTabView: View {
     @ObservedObject var pomodoro = PomodoroService.shared
+    @ObservedObject var calendar = CalendarMeetingService.shared
     @State private var notes: [NoteItem] = []
     @State private var newNoteText: String = ""
     
@@ -45,7 +46,7 @@ public struct NotesTimerTabView: View {
     // MARK: - Notes Column
     
     private var notesColumn: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 7) {
             // Header & Count
             HStack {
                 HStack(spacing: 5) {
@@ -63,6 +64,11 @@ public struct NotesTimerTabView: View {
                 Text("\(remaining) pending")
                     .font(.system(size: 10))
                     .foregroundColor(.white.opacity(0.5))
+            }
+            
+            // 📅 1-Click Meeting Join Banner
+            if let meeting = calendar.nextMeeting {
+                meetingBanner(meeting)
             }
             
             // New Task Input
@@ -102,7 +108,7 @@ public struct NotesTimerTabView: View {
                                 .font(.system(size: 11))
                                 .foregroundColor(.white.opacity(0.4))
                         }
-                        .padding(.top, 20)
+                        .padding(.top, calendar.nextMeeting != nil ? 10 : 20)
                     } else {
                         ForEach(notes) { note in
                             noteRow(note)
@@ -110,8 +116,79 @@ public struct NotesTimerTabView: View {
                     }
                 }
             }
-            .frame(height: 100)
+            .frame(height: calendar.nextMeeting != nil ? 62 : 100)
         }
+    }
+    
+    // MARK: - 📅 Meeting Banner
+    private func meetingBanner(_ meeting: MeetingItem) -> some View {
+        HStack(spacing: 8) {
+            // Platform Icon
+            ZStack {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.green.opacity(0.18))
+                    .frame(width: 26, height: 26)
+                
+                Image(systemName: meeting.platform.iconName)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.green)
+            }
+            
+            // Title & Countdown
+            VStack(alignment: .leading, spacing: 2) {
+                Text(meeting.title)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                
+                HStack(spacing: 4) {
+                    Text(meeting.formattedTimeRange)
+                        .font(.system(size: 9.5))
+                        .foregroundColor(.white.opacity(0.55))
+                    
+                    Text("•")
+                        .font(.system(size: 9.5))
+                        .foregroundColor(.white.opacity(0.35))
+                    
+                    Text(meeting.timeUntilString)
+                        .font(.system(size: 9.5, weight: .semibold))
+                        .foregroundColor(meeting.isOngoing ? .orange : .green)
+                }
+            }
+            
+            Spacer(minLength: 4)
+            
+            // 1-Click Join Button
+            if meeting.meetingURL != nil {
+                Button(action: {
+                    calendar.joinMeeting(meeting)
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "video.fill")
+                            .font(.system(size: 8.5, weight: .bold))
+                        Text("Join")
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    .foregroundColor(.black)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .background(Color.green)
+                    .clipShape(Capsule())
+                    .shadow(color: Color.green.opacity(0.4), radius: 3, x: 0, y: 1)
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.white.opacity(0.06))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.green.opacity(0.25), lineWidth: 1)
+                )
+        )
     }
     
     private func noteRow(_ note: NoteItem) -> some View {

@@ -9,6 +9,7 @@ public struct CompactNotchView: View {
     @ObservedObject var mic = MicrophoneService.shared
     @ObservedObject var network = NetworkMonitorService.shared
     @ObservedObject var market = MarketTickerService.shared
+    @ObservedObject var calendar = CalendarMeetingService.shared
     
     @State private var currentTime: String = ""
     @State private var clockTimer: AnyCancellable?
@@ -92,9 +93,19 @@ public struct CompactNotchView: View {
             
             Spacer(minLength: 0)
             
-            // MARK: - Right: Reactive Audio Waveform OR Compact Network / Market Pill
+            // MARK: - Right: Imminent Meeting OR Reactive Waveform OR Compact Network/Market Pill
             HStack {
-                if media.isPlaying {
+                if let meeting = calendar.nextMeeting, meeting.isImminent {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(meeting.isOngoing ? Color.orange : Color.green)
+                            .frame(width: 5, height: 5)
+                        Text("\(meeting.platform.shortName) \(meeting.timeUntilString)")
+                            .font(.system(size: 9, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                    }
+                } else if media.isPlaying {
                     WaveformView(
                         isPlaying: true,
                         color: .white,
@@ -130,7 +141,7 @@ public struct CompactNotchView: View {
                     )
                 }
             }
-            .frame(width: (!media.isPlaying && (market.showTickerInCompactNotch || network.showInCompactNotch)) ? 75 : 48, alignment: .trailing)
+            .frame(width: (calendar.nextMeeting?.isImminent == true || (!media.isPlaying && (market.showTickerInCompactNotch || network.showInCompactNotch))) ? 78 : 48, alignment: .trailing)
             .padding(.trailing, 14)
         }
         .frame(height: state.notchHeight)
