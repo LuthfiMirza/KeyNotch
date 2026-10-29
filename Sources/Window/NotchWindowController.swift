@@ -281,8 +281,9 @@ public final class NotchWindowController: NSObject {
                 width = 420
                 height = 96
             } else if hud.type == .incomingCall {
-                width = 420
-                height = 66
+                let isVideo = hud.iconName == "video.fill" || (hud.subtitle?.lowercased().contains("video") == true)
+                width = isVideo ? 520 : 420
+                height = isVideo ? 92 : 66
             } else {
                 width = 280
                 height = 46

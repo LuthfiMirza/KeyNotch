@@ -521,9 +521,7 @@ public struct IncomingCallToastContentView: View {
             HStack(spacing: 12) {
                 // Red Decline Button
                 Button(action: {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                        IslandState.shared.activeHUD = nil
-                    }
+                    WhatsAppNotificationService.shared.declineCall()
                 }) {
                     ZStack {
                         Circle()
@@ -541,12 +539,11 @@ public struct IncomingCallToastContentView: View {
                 
                 // Green Accept Video Call Button
                 Button(action: {
-                    WhatsAppNotificationService.shared.openWhatsApp()
-                    IslandState.shared.startActiveCall(
+                    WhatsAppNotificationService.shared.acceptCall(
                         caller: payload.title,
-                        source: "WhatsApp Video",
                         isVideo: true,
-                        avatarImagePath: payload.avatarImagePath
+                        source: "WhatsApp Video",
+                        avatarPath: payload.avatarImagePath
                     )
                 }) {
                     ZStack {
@@ -597,9 +594,7 @@ public struct IncomingCallToastContentView: View {
             // Right: Dual Interactive Buttons
             HStack(spacing: 12) {
                 Button(action: {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                        IslandState.shared.activeHUD = nil
-                    }
+                    WhatsAppNotificationService.shared.declineCall()
                 }) {
                     ZStack {
                         Circle()
@@ -616,12 +611,11 @@ public struct IncomingCallToastContentView: View {
                 .help("Tolak Panggilan")
                 
                 Button(action: {
-                    WhatsAppNotificationService.shared.openWhatsApp()
-                    IslandState.shared.startActiveCall(
+                    WhatsAppNotificationService.shared.acceptCall(
                         caller: payload.title,
-                        source: payload.subtitle ?? "from iPhone",
                         isVideo: false,
-                        avatarImagePath: payload.avatarImagePath
+                        source: payload.subtitle ?? "from iPhone",
+                        avatarPath: payload.avatarImagePath
                     )
                 }) {
                     ZStack {

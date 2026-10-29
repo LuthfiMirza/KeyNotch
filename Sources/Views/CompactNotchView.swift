@@ -118,7 +118,7 @@ public struct CompactNotchView: View {
                 )
                 
                 Button(action: {
-                    state.endActiveCall()
+                    WhatsAppNotificationService.shared.declineCall()
                 }) {
                     ZStack {
                         Circle()

@@ -507,6 +507,83 @@ public final class WhatsAppNotificationService: ObservableObject {
         }
     }
     
+    // MARK: - Phone Resolution for Quick Reply & Chat
+    
+    public func resolveLatestSenderPhone() -> String? {
+        // 1. Direct check from in-memory identifiers
+        if let ident = lastSenderIdentifier, ident.contains("@s.whatsapp.net") {
+            let digits = ident.components(separatedBy: "@").first?.filter { $0.isNumber }
+            if let d = digits, !d.isEmpty { return d }
+        }
+        if let jid = lastSenderJID, jid.contains("@s.whatsapp.net") {
+            let digits = jid.components(separatedBy: "@").first?.filter { $0.isNumber }
+            if let d = digits, !d.isEmpty { return d }
+        }
+        
+        var db: OpaquePointer?
+        let uri = "file:\(dbURL.path)?mode=ro"
+        guard sqlite3_open_v2(uri, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI | SQLITE_OPEN_NOMUTEX, nil) == SQLITE_OK else {
+            return nil
+        }
+        defer { sqlite3_close(db) }
+        
+        // 2. If JID is modern @lid, query ZWACHATSESSION for ZCONTACTIDENTIFIER
+        if let jid = lastSenderJID, !jid.isEmpty {
+            let query = "SELECT ZCONTACTIDENTIFIER FROM ZWACHATSESSION WHERE ZCONTACTJID = ? OR ZCONTACTJID LIKE '%' || ? || '%' LIMIT 1;"
+            var stmt: OpaquePointer?
+            if sqlite3_prepare_v2(db, query, -1, &stmt, nil) == SQLITE_OK {
+                sqlite3_bind_text(stmt, 1, (jid as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(stmt, 2, (jid as NSString).utf8String, -1, nil)
+                if sqlite3_step(stmt) == SQLITE_ROW {
+                    if let cStr = sqlite3_column_text(stmt, 0) {
+                        let identStr = String(cString: cStr)
+                        let digits = identStr.components(separatedBy: "@").first?.filter { $0.isNumber }
+                        if let d = digits, !d.isEmpty {
+                            sqlite3_finalize(stmt)
+                            return d
+                        }
+                    }
+                }
+                sqlite3_finalize(stmt)
+            }
+        }
+        
+        // 3. Fallback: Query the most recent incoming message row in ChatStorage.sqlite directly
+        let latestQuery = """
+        SELECT COALESCE(s.ZCONTACTIDENTIFIER, ''), COALESCE(s.ZCONTACTJID, '')
+        FROM ZWAMESSAGE m
+        LEFT JOIN ZWACHATSESSION s ON m.ZCHATSESSION = s.Z_PK
+        WHERE m.ZISFROMME = 0 AND m.ZMESSAGETYPE NOT IN (59, 10)
+        ORDER BY m.Z_PK DESC LIMIT 1;
+        """
+        var stmt: OpaquePointer?
+        if sqlite3_prepare_v2(db, latestQuery, -1, &stmt, nil) == SQLITE_OK {
+            if sqlite3_step(stmt) == SQLITE_ROW {
+                let ident = String(cString: sqlite3_column_text(stmt, 0))
+                let jid = String(cString: sqlite3_column_text(stmt, 1))
+                if ident.contains("@s.whatsapp.net") {
+                    let digits = ident.components(separatedBy: "@").first?.filter { $0.isNumber }
+                    if let d = digits, !d.isEmpty {
+                        sqlite3_finalize(stmt)
+                        return d
+                    }
+                }
+                if jid.contains("@s.whatsapp.net") {
+                    let digits = jid.components(separatedBy: "@").first?.filter { $0.isNumber }
+                    if let d = digits, !d.isEmpty {
+                        sqlite3_finalize(stmt)
+                        return d
+                    }
+                }
+            }
+            sqlite3_finalize(stmt)
+        }
+        
+        return nil
+    }
+    
+    // MARK: - Quick Reply
+    
     public func sendQuickReply(text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -515,33 +592,45 @@ public final class WhatsAppNotificationService: ObservableObject {
         pasteboard.clearContents()
         pasteboard.setString(trimmed, forType: .string)
         
-        // Extract digits from ZCONTACTIDENTIFIER or ZCONTACTJID
-        let phone: String? = {
-            if let ident = lastSenderIdentifier, ident.contains("@s.whatsapp.net") {
-                let digits = ident.components(separatedBy: "@").first?.filter { $0.isNumber }
-                if let d = digits, !d.isEmpty { return d }
-            }
-            if let jid = lastSenderJID, jid.contains("@s.whatsapp.net") {
-                let digits = jid.components(separatedBy: "@").first?.filter { $0.isNumber }
-                if let d = digits, !d.isEmpty { return d }
-            }
-            return nil
-        }()
+        let phone = resolveLatestSenderPhone()
         
         if let phone = phone,
            let encoded = trimmed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
            let url = URL(string: "whatsapp://send?phone=\(phone)&text=\(encoded)") {
-            // 1. Direct chat URL: opens contact chat with text pre-filled
+            // Direct chat URL: opens contact chat with text pre-filled
             NSWorkspace.shared.open(url)
-            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.6) {
+            
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 1.0) {
                 let script = """
                 tell application "WhatsApp" to activate
-                delay 0.15
                 tell application "System Events"
                     tell process "WhatsApp"
                         set frontmost to true
-                        delay 0.1
-                        key code 36
+                        set didSend to false
+                        
+                        -- Wait up to 2.0s for Send menu item to become active
+                        repeat 20 times
+                            repeat with mi in (every menu bar item of menu bar 1)
+                                if name of mi contains "Chat" then
+                                    repeat with sm in (every menu item of menu 1 of mi)
+                                        if name of sm contains "Send" and enabled of sm then
+                                            click sm
+                                            set didSend to true
+                                            exit repeat
+                                        end if
+                                    end repeat
+                                end if
+                                if didSend then exit repeat
+                            end repeat
+                            if didSend then exit repeat
+                            delay 0.1
+                        end repeat
+                        
+                        -- Fallback: Return key (key code 36)
+                        if not didSend then
+                            delay 0.15
+                            key code 36
+                        end if
                     end tell
                 end tell
                 """
@@ -549,23 +638,175 @@ public final class WhatsAppNotificationService: ObservableObject {
                 NSAppleScript(source: script)?.executeAndReturnError(&error)
             }
         } else {
-            // 2. Active chat: activate WhatsApp, paste clipboard (Cmd+V), and press Return (key code 36)
-            let script = """
-            tell application "WhatsApp" to activate
-            delay 0.25
-            tell application "System Events"
-                tell process "WhatsApp"
-                    set frontmost to true
-                    keystroke "v" using command down
-                    delay 0.1
-                    key code 36
-                end tell
-            end tell
-            """
+            // Active chat or group chat: activate WhatsApp, paste clipboard (Cmd+V), and send
             DispatchQueue.global(qos: .userInitiated).async {
+                let script = """
+                tell application "WhatsApp" to activate
+                delay 0.35
+                tell application "System Events"
+                    tell process "WhatsApp"
+                        set frontmost to true
+                        keystroke "v" using command down
+                        delay 0.15
+                        
+                        set didSend to false
+                        repeat with mi in (every menu bar item of menu bar 1)
+                            if name of mi contains "Chat" then
+                                repeat with sm in (every menu item of menu 1 of mi)
+                                    if name of sm contains "Send" and enabled of sm then
+                                        click sm
+                                        set didSend to true
+                                        exit repeat
+                                    end if
+                                end repeat
+                            end if
+                            if didSend then exit repeat
+                        end repeat
+                        
+                        if not didSend then
+                            key code 36
+                        end if
+                    end tell
+                end tell
+                """
                 var error: NSDictionary?
                 NSAppleScript(source: script)?.executeAndReturnError(&error)
             }
+        }
+    }
+    
+    // MARK: - Native Call Control (Accept & Decline)
+    
+    public func declineCall() {
+        // 1. Release camera preview immediately
+        CameraPreviewService.shared.stop()
+        
+        // 2. Dismiss KeyNotch HUD & end active call state
+        DispatchQueue.main.async {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+                IslandState.shared.activeHUD = nil
+                IslandState.shared.endActiveCall()
+            }
+        }
+        
+        // 3. AppleScript: Decline incoming call or hang up active call in WhatsApp
+        DispatchQueue.global(qos: .userInitiated).async {
+            let script = """
+            tell application "WhatsApp" to activate
+            tell application "System Events"
+                tell process "WhatsApp"
+                    set frontmost to true
+                    
+                    -- Try clicking any Decline / Tolak / Reject / End Call button in windows
+                    set clicked to false
+                    repeat with w in (every window)
+                        repeat with b in (every button of w)
+                            try
+                                set bDesc to ""
+                                try
+                                    set bDesc to description of b as text
+                                end try
+                                set bName to ""
+                                try
+                                    set bName to name of b as text
+                                end try
+                                set combined to bDesc & " " & bName
+                                if combined contains "Decline" or combined contains "Tolak" or combined contains "Reject" or combined contains "End" or combined contains "Tutup" then
+                                    click b
+                                    set clicked to true
+                                    exit repeat
+                                end if
+                            end try
+                        end repeat
+                        if clicked then exit repeat
+                    end repeat
+                    
+                    -- Try clicking End Call in Call menu
+                    if not clicked then
+                        repeat with mi in (every menu bar item of menu bar 1)
+                            if name of mi contains "Call" then
+                                repeat with sm in (every menu item of menu 1 of mi)
+                                    if name of sm contains "End Call" and enabled of sm then
+                                        click sm
+                                        set clicked to true
+                                        exit repeat
+                                    end if
+                                end repeat
+                            end if
+                            if clicked then exit repeat
+                        end repeat
+                    end if
+                    
+                    -- Fallback: Escape key declines incoming ringing calls in WhatsApp
+                    key code 53
+                end tell
+            end tell
+            """
+            var error: NSDictionary?
+            NSAppleScript(source: script)?.executeAndReturnError(&error)
+        }
+    }
+    
+    public func acceptCall(caller: String, isVideo: Bool, source: String = "from iPhone", avatarPath: String? = nil) {
+        // 1. Release camera in KeyNotch so WhatsApp gets exclusive hardware camera access
+        CameraPreviewService.shared.stop()
+        
+        // 2. Start ongoing call in KeyNotch Dynamic Island
+        DispatchQueue.main.async {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+                IslandState.shared.activeHUD = nil
+            }
+            IslandState.shared.startActiveCall(
+                caller: caller,
+                source: source,
+                isVideo: isVideo,
+                avatarImagePath: avatarPath
+            )
+        }
+        
+        // 3. AppleScript: Accept call in WhatsApp
+        DispatchQueue.global(qos: .userInitiated).async {
+            let script = """
+            tell application "WhatsApp" to activate
+            delay 0.15
+            tell application "System Events"
+                tell process "WhatsApp"
+                    set frontmost to true
+                    
+                    -- Try clicking Accept / Terima / Answer button in windows
+                    set clicked to false
+                    repeat with w in (every window)
+                        repeat with b in (every button of w)
+                            try
+                                set bDesc to ""
+                                try
+                                    set bDesc to description of b as text
+                                end try
+                                set bName to ""
+                                try
+                                    set bName to name of b as text
+                                end try
+                                set combined to bDesc & " " & bName
+                                if combined contains "Accept" or combined contains "Terima" or combined contains "Answer" or combined contains "Jawab" then
+                                    click b
+                                    set clicked to true
+                                    exit repeat
+                                end if
+                            end try
+                        end repeat
+                        if clicked then exit repeat
+                    end repeat
+                    
+                    -- Fallback: Return key (key code 36) answers ringing call in WhatsApp
+                    if not clicked then
+                        delay 0.1
+                        key code 36
+                    end if
+                end tell
+            end tell
+            """
+            var error: NSDictionary?
+            NSAppleScript(source: script)?.executeAndReturnError(&error)
         }
     }
     
