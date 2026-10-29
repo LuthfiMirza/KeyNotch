@@ -145,7 +145,12 @@ public struct NotchRootView: View {
                         }
                     }
                     .frame(width: currentWidth, height: currentHeight, alignment: .top)
-                    .clipped()
+                    .clipShape(
+                        NotchShape(
+                            cornerRadius: currentCornerRadius,
+                            topShoulderRadius: currentShoulderRadius
+                        )
+                    )
                 }
                 .frame(width: currentWidth, height: currentHeight)
                 .animation(.spring(response: 0.35, dampingFraction: 0.78), value: state.isExpanded)
@@ -167,10 +172,22 @@ public struct NotchRootView: View {
     }
     
     private func selectTab(at index: Int) {
-        guard index >= 0 && index < IslandTab.allCases.count else { return }
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
-            state.selectedTab = IslandTab.allCases[index]
-        }
+        state.selectTab(at: index)
+    }
+    
+    private var inNotchTransition: AnyTransition {
+        let isForward = state.slideDirection == .forward
+        let delta: CGFloat = 28
+        return .asymmetric(
+            insertion: .modifier(
+                active: TabPageTransitionModifier(offset: isForward ? delta : -delta, opacity: 0, scale: 0.98),
+                identity: TabPageTransitionModifier(offset: 0, opacity: 1, scale: 1.0)
+            ),
+            removal: .modifier(
+                active: TabPageTransitionModifier(offset: isForward ? -delta : delta, opacity: 0, scale: 0.98),
+                identity: TabPageTransitionModifier(offset: 0, opacity: 1, scale: 1.0)
+            )
+        )
     }
     
     private var pendingRemindersCount: Int {
@@ -271,56 +288,56 @@ public struct NotchRootView: View {
             .padding(.horizontal, 16)
             .padding(.top, 9)
             
-            // MARK: - Discrete Horizontal Paging Slider (Uniform 212px Height, Non-Continuous Snapping)
-            GeometryReader { geo in
-                let width = geo.size.width
-                HStack(spacing: 0) {
+            // MARK: - Apple In-Notch Directional Slide & Fade (100% Inside Notch)
+            ZStack {
+                switch state.selectedTab {
+                case .controls:
                     ControlsMediaTabView()
-                        .frame(width: width, height: 212, alignment: .top)
-                    
+                        .transition(inNotchTransition)
+                        .id(IslandTab.controls)
+                case .music:
                     MusicTabView()
-                        .frame(width: width, height: 212, alignment: .top)
-                    
+                        .transition(inNotchTransition)
+                        .id(IslandTab.music)
+                case .notes:
                     NotesTimerTabView()
-                        .frame(width: width, height: 212, alignment: .top)
-                    
+                        .transition(inNotchTransition)
+                        .id(IslandTab.notes)
+                case .devices:
                     DevicesTabView()
-                        .frame(width: width, height: 212, alignment: .top)
-                    
+                        .transition(inNotchTransition)
+                        .id(IslandTab.devices)
+                case .shelf:
                     ShelfClipboardTabView()
-                        .frame(width: width, height: 212, alignment: .top)
+                        .transition(inNotchTransition)
+                        .id(IslandTab.shelf)
                 }
-                .offset(x: -CGFloat(currentTabIndex) * width + dragOffset)
-                .animation(.spring(response: 0.35, dampingFraction: 0.78), value: currentTabIndex)
-                .gesture(
-                    DragGesture(minimumDistance: 15)
-                        .onChanged { value in
-                            let translation = value.translation.width
-                            // Apply resistance at edges
-                            if (currentTabIndex == 0 && translation > 0) ||
-                               (currentTabIndex == IslandTab.allCases.count - 1 && translation < 0) {
-                                dragOffset = translation * 0.25
-                            } else {
-                                dragOffset = translation
-                            }
-                        }
-                        .onEnded { value in
-                            let threshold: CGFloat = 45
-                            let predicted = value.predictedEndTranslation.width
-                            
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
-                                if (value.translation.width < -threshold || predicted < -120) && currentTabIndex < IslandTab.allCases.count - 1 {
-                                    selectTab(at: currentTabIndex + 1)
-                                } else if (value.translation.width > threshold || predicted > 120) && currentTabIndex > 0 {
-                                    selectTab(at: currentTabIndex - 1)
-                                }
-                                dragOffset = 0
-                            }
-                        }
-                )
             }
-            .frame(height: 212)
-            .clipped()
+            .frame(height: 212, alignment: .top)
+            .offset(x: dragOffset * 0.25)
+            .gesture(
+                DragGesture(minimumDistance: 15)
+                    .onChanged { value in
+                        let translation = value.translation.width
+                        if (currentTabIndex == 0 && translation > 0) ||
+                           (currentTabIndex == IslandTab.allCases.count - 1 && translation < 0) {
+                            dragOffset = translation * 0.15
+                        } else {
+                            dragOffset = translation
+                        }
+                    }
+                    .onEnded { value in
+                        let threshold: CGFloat = 35
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                            if value.translation.width < -threshold {
+                                state.selectNextTab()
+                            } else if value.translation.width > threshold {
+                                state.selectPreviousTab()
+                            }
+                            dragOffset = 0
+                        }
+                    }
+            )
             
             // MARK: - Bottom Dot Page Indicator (Interactive & Centered with Bottom Padding)
             HStack(spacing: 7) {
@@ -352,3 +369,24 @@ public struct NotchRootView: View {
         }
     }
 }
+
+// MARK: - In-Notch Fluid Transition Modifier
+public struct TabPageTransitionModifier: ViewModifier {
+    public let offset: CGFloat
+    public let opacity: Double
+    public let scale: CGFloat
+    
+    public init(offset: CGFloat, opacity: Double, scale: CGFloat) {
+        self.offset = offset
+        self.opacity = opacity
+        self.scale = scale
+    }
+    
+    public func body(content: Content) -> some View {
+        content
+            .offset(x: offset)
+            .opacity(opacity)
+            .scaleEffect(scale)
+    }
+}
+
