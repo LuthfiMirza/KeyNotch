@@ -1,39 +1,11 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-public struct StagedFile: Identifiable {
-    public let id: UUID = UUID()
-    public let url: URL
-    public let name: String
-    public let icon: NSImage
-    public let isImage: Bool
-    public let fileSizeString: String
-    
-    public init(url: URL) {
-        self.url = url
-        self.name = url.lastPathComponent
-        self.icon = NSWorkspace.shared.icon(forFile: url.path)
-        
-        let ext = url.pathExtension.lowercased()
-        self.isImage = ["png", "jpg", "jpeg", "webp", "heic", "tiff", "gif", "bmp"].contains(ext)
-        
-        if let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
-           let size = attrs[.size] as? Int64 {
-            let formatter = ByteCountFormatter()
-            formatter.allowedUnits = [.useKB, .useMB]
-            formatter.countStyle = .file
-            self.fileSizeString = formatter.string(fromByteCount: size)
-        } else {
-            self.fileSizeString = "--"
-        }
-    }
-}
-
 public struct ShelfClipboardTabView: View {
     @ObservedObject var clipboard = ClipboardService.shared
     @ObservedObject var transfer = DownloadTransferService.shared
+    @ObservedObject var shelf = FileShelfService.shared
     @State private var subTab: Int = 0 // 0 = Files Shelf, 1 = Clipboard History, 2 = Sequential Paste Queue
-    @State private var stagedFiles: [StagedFile] = []
     @State private var isTargeted: Bool = false
     
     public init() {}
@@ -49,8 +21,8 @@ public struct ShelfClipboardTabView: View {
                             .font(.system(size: 11, weight: .semibold))
                         Text("Files Shelf")
                             .font(.system(size: 11, weight: .semibold))
-                        if !stagedFiles.isEmpty {
-                            Text("\(stagedFiles.count)")
+                        if !shelf.stagedFiles.isEmpty {
+                            Text("\(shelf.stagedFiles.count)")
                                 .font(.system(size: 9, weight: .bold))
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 1)
@@ -138,8 +110,8 @@ public struct ShelfClipboardTabView: View {
                         }
                         .buttonStyle(PlainButtonStyle())
                         
-                        if !stagedFiles.isEmpty {
-                            Button(action: { stagedFiles.removeAll() }) {
+                        if !shelf.stagedFiles.isEmpty {
+                            Button(action: { shelf.clearAll() }) {
                                 Text("Clear All")
                                     .font(.system(size: 10, weight: .medium))
                                     .foregroundColor(.white.opacity(0.5))
@@ -234,7 +206,7 @@ public struct ShelfClipboardTabView: View {
                 activeTransferCard(primary)
             }
             
-            if stagedFiles.isEmpty {
+            if shelf.stagedFiles.isEmpty {
                 // Drop Target Area
                 ZStack {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -271,7 +243,7 @@ public struct ShelfClipboardTabView: View {
                 // List of Staged Files
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(spacing: 6) {
-                        ForEach(stagedFiles) { file in
+                        ForEach(shelf.stagedFiles) { file in
                             stagedFileRow(file)
                         }
                     }
@@ -450,9 +422,7 @@ public struct ShelfClipboardTabView: View {
             
             // Remove Button
             Button(action: {
-                withAnimation {
-                    stagedFiles.removeAll { $0.id == file.id }
-                }
+                shelf.removeFile(id: file.id)
             }) {
                 Image(systemName: "xmark")
                     .font(.system(size: 10, weight: .bold))
@@ -471,22 +441,7 @@ public struct ShelfClipboardTabView: View {
     }
     
     private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
-        for provider in providers {
-            provider.loadItem(forTypeIdentifier: "public.file-url", options: nil) { (urlData, error) in
-                guard let data = urlData as? Data,
-                      let url = URL(dataRepresentation: data, relativeTo: nil) else {
-                    if let url = urlData as? URL {
-                        DispatchQueue.main.async {
-                            self.stagedFiles.append(StagedFile(url: url))
-                        }
-                    }
-                    return
-                }
-                DispatchQueue.main.async {
-                    self.stagedFiles.append(StagedFile(url: url))
-                }
-            }
-        }
+        shelf.addFiles(from: providers)
         return true
     }
     

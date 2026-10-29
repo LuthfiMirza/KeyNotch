@@ -4,6 +4,7 @@ public struct NotchRootView: View {
     @ObservedObject var state = IslandState.shared
     @ObservedObject var lyrics = LyricsService.shared
     @ObservedObject var transfer = DownloadTransferService.shared
+    @ObservedObject var shelf = FileShelfService.shared
     @State private var dragOffset: CGFloat = 0
     
     public init() {}
@@ -224,6 +225,14 @@ public struct NotchRootView: View {
                     } else if state.selectedTab == .shelf {
                         if let primary = transfer.primaryTransfer {
                             Text("\(primary.percentageString)")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(.cyan)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(Color.cyan.opacity(0.18))
+                                .clipShape(Capsule())
+                        } else if !shelf.stagedFiles.isEmpty {
+                            Text("\(shelf.stagedFiles.count) files")
                                 .font(.system(size: 9, weight: .bold))
                                 .foregroundColor(.cyan)
                                 .padding(.horizontal, 5)
