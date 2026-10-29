@@ -38,11 +38,13 @@ public struct HUDToastView: View {
                 bluetoothToastView
             case .volume, .brightness:
                 sliderToastView
+            case .whatsapp:
+                whatsAppToastView
             default:
                 standardToastView
             }
         }
-        .frame(height: payload.type == .battery ? 52 : (payload.type == .bluetooth ? 48 : 46))
+        .frame(height: payload.type == .battery ? 52 : (payload.type == .bluetooth ? 48 : (payload.type == .whatsapp ? 54 : 46)))
     }
     
     // MARK: - 1. Charging Toast (Enlarged Morphing Capsule 370x52)
@@ -260,5 +262,75 @@ public struct HUDToastView: View {
                     .padding(.trailing, 12)
             }
         }
+    }
+    
+    // MARK: - 5. WhatsApp Incoming Message Banner (Morphing Capsule 390x54)
+    
+    private var whatsAppToastView: some View {
+        Button(action: {
+            WhatsAppNotificationService.shared.openWhatsApp()
+            IslandState.shared.activeHUD = nil
+        }) {
+            HStack(spacing: 12) {
+                // Glowing WhatsApp App Icon Badge
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color(red: 0.15, green: 0.83, blue: 0.40), Color(red: 0.08, green: 0.68, blue: 0.32)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 34, height: 34)
+                        .shadow(color: Color(red: 0.15, green: 0.83, blue: 0.40).opacity(0.4), radius: 4)
+                    
+                    Image(systemName: "message.fill")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(.white)
+                }
+                .padding(.leading, 14)
+                
+                // Contact / Group Name & Message Preview
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(payload.title)
+                            .font(.system(size: 13.5, weight: .bold))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                        
+                        Text("WhatsApp")
+                            .font(.system(size: 8.5, weight: .bold))
+                            .foregroundColor(Color(red: 0.15, green: 0.83, blue: 0.40))
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1.5)
+                            .background(Color(red: 0.15, green: 0.83, blue: 0.40).opacity(0.18))
+                            .clipShape(Capsule())
+                    }
+                    
+                    Text(payload.subtitle ?? "Pesan baru")
+                        .font(.system(size: 11.5, weight: .regular))
+                        .foregroundColor(.white.opacity(0.85))
+                        .lineLimit(1)
+                }
+                
+                Spacer(minLength: 8)
+                
+                // Action: "Open / Buka" Pill
+                HStack(spacing: 3) {
+                    Text("Buka")
+                        .font(.system(size: 10, weight: .bold))
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 8, weight: .bold))
+                }
+                .foregroundColor(.white.opacity(0.85))
+                .padding(.horizontal, 9)
+                .padding(.vertical, 5)
+                .background(Color.white.opacity(0.12))
+                .clipShape(Capsule())
+                .padding(.trailing, 14)
+            }
+        }
+        .buttonStyle(PlainButtonStyle())
     }
 }

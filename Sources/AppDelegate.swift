@@ -27,6 +27,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         
         // Setup Menu Bar Tray Icon
         setupStatusItem()
+        // Initialize Services
+        _ = WhatsAppNotificationService.shared
         
         // Setup IPC Test Notifications
         setupIPCNotifications()
@@ -81,14 +83,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         }
         
         DistributedNotificationCenter.default().addObserver(
-            forName: NSNotification.Name("com.keynotch.dumpMedia"),
+            forName: NSNotification.Name("com.keynotch.triggerWhatsAppHUD"),
             object: nil,
             queue: .main
         ) { _ in
-            let m = MediaRemoteService.shared
-            let l = LyricsService.shared
-            let str = "Title: \(m.title)\nArtist: \(m.artist)\nisPlaying: \(m.isPlaying)\nduration: \(m.duration)\nelapsed: \(m.elapsedTime)\nhasMedia: \(m.hasActiveMedia)\nLyricsCount: \(l.lyrics.count)\nLyricsStatus: \(l.statusMessage ?? "none")"
-            try? str.write(toFile: "/tmp/keynotch_media_debug.txt", atomically: true, encoding: .utf8)
+            WhatsAppNotificationService.shared.simulateIncomingMessage()
         }
     }
     
@@ -263,6 +262,24 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         testBluetoothItem.target = self
         menu.addItem(testBluetoothItem)
         
+        // WhatsApp Island Notifications
+        let waItem = NSMenuItem(
+            title: "WhatsApp Island Notifications",
+            action: #selector(toggleWhatsAppNotifications),
+            keyEquivalent: ""
+        )
+        waItem.target = self
+        waItem.state = WhatsAppNotificationService.shared.isEnabled ? .on : .off
+        menu.addItem(waItem)
+        
+        let testWAItem = NSMenuItem(
+            title: "💬 Test WhatsApp Island HUD",
+            action: #selector(testWhatsAppHUD),
+            keyEquivalent: ""
+        )
+        testWAItem.target = self
+        menu.addItem(testWAItem)
+        
         menu.addItem(NSMenuItem.separator())
         
         // Quit
@@ -335,6 +352,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
     
     @objc private func testBluetoothHUD() {
         BluetoothService.shared.triggerTestBluetoothHUD(name: "AirBuds Pro", battery: 70)
+    }
+    
+    @objc private func toggleWhatsAppNotifications() {
+        WhatsAppNotificationService.shared.isEnabled.toggle()
+    }
+    
+    @objc private func testWhatsAppHUD() {
+        WhatsAppNotificationService.shared.simulateIncomingMessage()
     }
     
     @objc private func pickScreenColor() {

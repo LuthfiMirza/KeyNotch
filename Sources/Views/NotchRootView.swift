@@ -27,6 +27,8 @@ public struct NotchRootView: View {
                 return 370
             } else if hud.type == .bluetooth {
                 return 360
+            } else if hud.type == .whatsapp {
+                return 390
             }
             return 280
         }
@@ -44,6 +46,8 @@ public struct NotchRootView: View {
                 return 52
             } else if hud.type == .bluetooth {
                 return 48
+            } else if hud.type == .whatsapp {
+                return 54
             }
             return 46
         }
@@ -60,6 +64,8 @@ public struct NotchRootView: View {
                 return 22
             } else if hud.type == .bluetooth {
                 return 21
+            } else if hud.type == .whatsapp {
+                return 23
             }
             return 20
         }
@@ -75,6 +81,8 @@ public struct NotchRootView: View {
                 return 8
             } else if hud.type == .bluetooth {
                 return 7.5
+            } else if hud.type == .whatsapp {
+                return 8.5
             }
             return 7
         }

@@ -28,6 +28,7 @@ public enum HUDType {
     case battery
     case bluetooth
     case custom
+    case whatsapp
 }
 
 public struct HUDPayload: Identifiable, Equatable {
