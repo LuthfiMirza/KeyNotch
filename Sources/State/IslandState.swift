@@ -267,6 +267,11 @@ public final class IslandState: ObservableObject {
         // Only show HUD if not already fully expanded
         guard !isExpanded else { return }
         
+        // Protect Incoming Call: incoming calls are high-priority and shouldn't be interrupted by chat messages or volume
+        if let active = activeHUD, active.type == .incomingCall && payload.type != .incomingCall {
+            return
+        }
+        
         hudDismissTimer?.cancel()
         withAnimation(.spring(response: 0.38, dampingFraction: 0.72)) {
             activeHUD = payload

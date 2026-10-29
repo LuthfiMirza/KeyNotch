@@ -46,8 +46,11 @@ public final class WhatsAppNotificationService: ObservableObject {
     private var walSource: DispatchSourceFileSystemObject?
     private var callWalSource: DispatchSourceFileSystemObject?
     private var debounceWorkItem: DispatchWorkItem?
-    private var lastSeenPK: Int64 = 0
-    private var lastSeenCallPK: Int64 = 0
+    private var lastSeenMessagePK: Int64 = 0
+    private var lastSeenCallMsgPK: Int64 = 0
+    private var lastSeenCallHistoryPK: Int64 = 0
+    private var lastSenderIdentifier: String? = nil
+    private var lastSenderJID: String? = nil
     
     private let sharedContainerURL: URL
     private let dbURL: URL
@@ -183,32 +186,44 @@ public final class WhatsAppNotificationService: ObservableObject {
         
         let workItem = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
-            self.checkForNewMessages()
+            // Check for incoming calls first (highest priority)
             self.checkForNewCalls()
+            self.checkForNewMessages()
             self.attachWALSourceIfNeeded()
             self.attachCallWALSourceIfNeeded()
         }
         self.debounceWorkItem = workItem
-        queue.asyncAfter(deadline: .now() + 0.35, execute: workItem)
+        queue.asyncAfter(deadline: .now() + 0.15, execute: workItem)
     }
     
     private func establishBaseline() {
-        // 1. Messages baseline
+        // 1. Messages and Calls baseline from ChatStorage.sqlite
         var db: OpaquePointer?
         let uri = "file:\(dbURL.path)?mode=ro"
         if sqlite3_open_v2(uri, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI | SQLITE_OPEN_NOMUTEX, nil) == SQLITE_OK {
-            var stmt: OpaquePointer?
-            let sql = "SELECT MAX(Z_PK) FROM ZWAMESSAGE WHERE ZISFROMME = 0;"
-            if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
-                if sqlite3_step(stmt) == SQLITE_ROW {
-                    self.lastSeenPK = sqlite3_column_int64(stmt, 0)
+            // Baseline for regular messages (ignoring calls)
+            var msgStmt: OpaquePointer?
+            let msgSql = "SELECT MAX(Z_PK) FROM ZWAMESSAGE WHERE ZISFROMME = 0 AND ZMESSAGETYPE NOT IN (59, 10);"
+            if sqlite3_prepare_v2(db, msgSql, -1, &msgStmt, nil) == SQLITE_OK {
+                if sqlite3_step(msgStmt) == SQLITE_ROW {
+                    self.lastSeenMessagePK = sqlite3_column_int64(msgStmt, 0)
                 }
-                sqlite3_finalize(stmt)
+                sqlite3_finalize(msgStmt)
+            }
+            
+            // Baseline for incoming calls in ZWAMESSAGE
+            var callStmt: OpaquePointer?
+            let callSql = "SELECT MAX(Z_PK) FROM ZWAMESSAGE WHERE ZISFROMME = 0 AND (ZMESSAGETYPE = 59 OR (ZMESSAGETYPE = 10 AND ZGROUPEVENTTYPE = 5));"
+            if sqlite3_prepare_v2(db, callSql, -1, &callStmt, nil) == SQLITE_OK {
+                if sqlite3_step(callStmt) == SQLITE_ROW {
+                    self.lastSeenCallMsgPK = sqlite3_column_int64(callStmt, 0)
+                }
+                sqlite3_finalize(callStmt)
             }
             sqlite3_close(db)
         }
         
-        // 2. Call history baseline
+        // 2. Call history baseline from CallHistory.sqlite (used to monitor call finish / missed)
         var callDB: OpaquePointer?
         let callUri = "file:\(callDBURL.path)?mode=ro"
         if sqlite3_open_v2(callUri, &callDB, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI | SQLITE_OPEN_NOMUTEX, nil) == SQLITE_OK {
@@ -216,13 +231,153 @@ public final class WhatsAppNotificationService: ObservableObject {
             let sql = "SELECT MAX(Z_PK) FROM ZWAAGGREGATECALLEVENT;"
             if sqlite3_prepare_v2(callDB, sql, -1, &stmt, nil) == SQLITE_OK {
                 if sqlite3_step(stmt) == SQLITE_ROW {
-                    self.lastSeenCallPK = sqlite3_column_int64(stmt, 0)
+                    self.lastSeenCallHistoryPK = sqlite3_column_int64(stmt, 0)
                 }
                 sqlite3_finalize(stmt)
             }
             sqlite3_close(callDB)
         }
     }
+    
+    // MARK: - Dedicated Incoming Call Tracking (Zero Dropped Calls)
+    
+    private func checkForNewCalls() {
+        guard isEnabled else { return }
+        
+        var db: OpaquePointer?
+        let uri = "file:\(dbURL.path)?mode=ro"
+        guard sqlite3_open_v2(uri, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI | SQLITE_OPEN_NOMUTEX, nil) == SQLITE_OK else {
+            return
+        }
+        defer { sqlite3_close(db) }
+        
+        // WhatsApp writes the incoming call row into ZWAMESSAGE the very millisecond the phone rings
+        let callQuery = """
+        SELECT 
+            m.Z_PK,
+            COALESCE(s.ZPARTNERNAME, 'WhatsApp'),
+            COALESCE(s.ZCONTACTJID, ''),
+            COALESCE(s.ZCONTACTIDENTIFIER, ''),
+            COALESCE(m.ZSTANZAID, '')
+        FROM ZWAMESSAGE m
+        LEFT JOIN ZWACHATSESSION s ON m.ZCHATSESSION = s.Z_PK
+        WHERE m.ZISFROMME = 0 
+          AND (m.ZMESSAGETYPE = 59 OR (m.ZMESSAGETYPE = 10 AND m.ZGROUPEVENTTYPE = 5))
+          AND m.Z_PK > ?
+        ORDER BY m.Z_PK ASC;
+        """
+        
+        var stmt: OpaquePointer?
+        if sqlite3_prepare_v2(db, callQuery, -1, &stmt, nil) == SQLITE_OK {
+            sqlite3_bind_int64(stmt, 1, lastSeenCallMsgPK)
+            
+            while sqlite3_step(stmt) == SQLITE_ROW {
+                let pk = sqlite3_column_int64(stmt, 0)
+                let rawSender = String(cString: sqlite3_column_text(stmt, 1))
+                let rawJID = String(cString: sqlite3_column_text(stmt, 2))
+                let rawIdentifier = String(cString: sqlite3_column_text(stmt, 3))
+                let stanzaID: String
+                if let cStr = sqlite3_column_text(stmt, 4) {
+                    stanzaID = String(cString: cStr)
+                } else {
+                    stanzaID = ""
+                }
+                
+                self.lastSeenCallMsgPK = max(self.lastSeenCallMsgPK, pk)
+                
+                let isVideo = self.isCallVideo(stanzaID: stanzaID)
+                let lookupJID = !rawJID.isEmpty ? rawJID : rawIdentifier
+                let caller = (rawSender != "WhatsApp" && !rawSender.isEmpty) ? rawSender : self.resolveCallerName(rawJID: lookupJID)
+                let avatarPath = self.resolveAvatarPath(rawJID: lookupJID)
+                
+                DispatchQueue.main.async {
+                    self.presentCallNotification(
+                        caller: caller,
+                        isVideo: isVideo,
+                        source: isVideo ? "WhatsApp Video" : "from iPhone",
+                        avatarPath: avatarPath
+                    )
+                }
+            }
+            sqlite3_finalize(stmt)
+        }
+        
+        // Check CallHistory.sqlite for call outcomes (missed, cancelled, or answered)
+        self.checkCallHistoryOutcomes()
+    }
+    
+    private func checkCallHistoryOutcomes() {
+        guard FileManager.default.fileExists(atPath: callDBURL.path) else { return }
+        
+        var db: OpaquePointer?
+        let uri = "file:\(callDBURL.path)?mode=ro"
+        guard sqlite3_open_v2(uri, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI | SQLITE_OPEN_NOMUTEX, nil) == SQLITE_OK else {
+            return
+        }
+        defer { sqlite3_close(db) }
+        
+        let query = """
+        SELECT 
+            a.Z_PK,
+            a.ZINCOMING,
+            a.ZVIDEO,
+            COALESCE(c.ZGROUPCALLCREATORUSERJIDSTRING, p.ZJIDSTRING, ''),
+            COALESCE(c.ZOUTCOME, 0),
+            COALESCE(c.ZDURATION, 0.0),
+            COALESCE(a.ZMISSED, 0)
+        FROM ZWAAGGREGATECALLEVENT a
+        LEFT JOIN ZWACDCALLEVENT c ON c.Z1CALLEVENTS = a.Z_PK
+        LEFT JOIN ZWACDCALLEVENTPARTICIPANT p ON p.Z1PARTICIPANTS = c.Z_PK
+        WHERE a.Z_PK > ?
+        ORDER BY a.Z_PK ASC;
+        """
+        
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, query, -1, &stmt, nil) == SQLITE_OK else { return }
+        defer { sqlite3_finalize(stmt) }
+        
+        sqlite3_bind_int64(stmt, 1, lastSeenCallHistoryPK)
+        
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            let pk = sqlite3_column_int64(stmt, 0)
+            let isIncoming = sqlite3_column_int(stmt, 1) == 1
+            let isVideo = sqlite3_column_int(stmt, 2) == 1
+            let rawJID = String(cString: sqlite3_column_text(stmt, 3))
+            let outcome = sqlite3_column_int(stmt, 4)
+            let duration = sqlite3_column_double(stmt, 5)
+            let missed = sqlite3_column_int(stmt, 6) == 1
+            
+            self.lastSeenCallHistoryPK = max(self.lastSeenCallHistoryPK, pk)
+            
+            guard isIncoming else { continue }
+            
+            let callerName = resolveCallerName(rawJID: rawJID)
+            let avatarPath = resolveAvatarPath(rawJID: rawJID)
+            
+            DispatchQueue.main.async {
+                if outcome == 4 || outcome == 5 || missed {
+                    // Call was missed, rejected, or caller hung up!
+                    if IslandState.shared.activeHUD?.type == .incomingCall {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+                            IslandState.shared.activeHUD = nil
+                        }
+                    }
+                } else if outcome == 1 && duration > 0 {
+                    // Call answered on phone/Mac -> Transition to compact live activity
+                    if IslandState.shared.activeCall == nil {
+                        IslandState.shared.startActiveCall(
+                            caller: callerName,
+                            source: isVideo ? "WhatsApp Video" : "WhatsApp Audio",
+                            isVideo: isVideo,
+                            avatarImagePath: avatarPath
+                        )
+                    }
+                }
+            }
+        }
+    }
+    
+    // MARK: - Regular Message Tracking (Never Drops Messages)
     
     private func checkForNewMessages() {
         guard isEnabled else { return }
@@ -241,13 +396,14 @@ public final class WhatsAppNotificationService: ObservableObject {
             COALESCE(m.ZTEXT, ''),
             m.ZMESSAGETYPE,
             COALESCE(s.ZCONTACTJID, ''),
-            COALESCE(m.ZGROUPEVENTTYPE, 0),
-            COALESCE(m.ZSTANZAID, '')
+            COALESCE(s.ZCONTACTIDENTIFIER, '')
         FROM ZWAMESSAGE m
         LEFT JOIN ZWACHATSESSION s ON m.ZCHATSESSION = s.Z_PK
-        WHERE m.ZISFROMME = 0 AND m.Z_PK > ?
-        ORDER BY m.Z_PK DESC
-        LIMIT 1;
+        WHERE m.ZISFROMME = 0 
+          AND m.ZMESSAGETYPE NOT IN (59, 10)
+          AND m.Z_PK > ?
+        ORDER BY m.Z_PK ASC
+        LIMIT 5;
         """
         
         var stmt: OpaquePointer?
@@ -256,49 +412,47 @@ public final class WhatsAppNotificationService: ObservableObject {
         }
         defer { sqlite3_finalize(stmt) }
         
-        sqlite3_bind_int64(stmt, 1, lastSeenPK)
+        sqlite3_bind_int64(stmt, 1, lastSeenMessagePK)
         
-        if sqlite3_step(stmt) == SQLITE_ROW {
+        var latestSender: String?
+        var latestBody: String?
+        var latestAvatar: String?
+        var latestIdentifier: String?
+        var latestJID: String?
+        var latestPK: Int64 = lastSeenMessagePK
+        
+        while sqlite3_step(stmt) == SQLITE_ROW {
             let pk = sqlite3_column_int64(stmt, 0)
             let rawSender = String(cString: sqlite3_column_text(stmt, 1))
             let rawText = String(cString: sqlite3_column_text(stmt, 2))
             let msgType = sqlite3_column_int(stmt, 3)
             let rawJID = String(cString: sqlite3_column_text(stmt, 4))
-            let groupEventType = sqlite3_column_int(stmt, 5)
-            let stanzaID: String
-            if let cStr = sqlite3_column_text(stmt, 6) {
-                stanzaID = String(cString: cStr)
-            } else {
-                stanzaID = ""
-            }
+            let rawIdentifier = String(cString: sqlite3_column_text(stmt, 5))
             
-            // Advance baseline
-            self.lastSeenPK = pk
-            let avatarPath = self.resolveAvatarPath(rawJID: rawJID)
-            
-            // CRITICAL BUG FIX: Detect Incoming Calls vs Regular Messages
-            // In WhatsApp, incoming calls are recorded with ZMESSAGETYPE = 59 or ZGROUPEVENTTYPE = 5
-            if msgType == 59 || (msgType == 10 && groupEventType == 5) {
-                let isVideo = self.isCallVideo(stanzaID: stanzaID)
-                let caller = (rawSender != "WhatsApp" && !rawSender.isEmpty) ? rawSender : self.resolveCallerName(rawJID: rawJID)
-                DispatchQueue.main.async {
-                    self.presentCallNotification(
-                        caller: caller,
-                        isVideo: isVideo,
-                        source: isVideo ? "WhatsApp Video" : "from iPhone",
-                        avatarPath: avatarPath
-                    )
-                }
-                return
-            }
-            
-            // Regular Chat Message -> Show WhatsApp message toast with Quick Reply
-            let displayBody = self.formatMessageBody(text: rawText, type: msgType)
-            let msg = WhatsAppMessage(id: pk, sender: rawSender, text: displayBody)
+            latestPK = max(latestPK, pk)
+            latestSender = rawSender
+            latestBody = self.formatMessageBody(text: rawText, type: msgType)
+            latestAvatar = self.resolveAvatarPath(rawJID: !rawJID.isEmpty ? rawJID : rawIdentifier)
+            latestIdentifier = rawIdentifier
+            latestJID = rawJID
+        }
+        
+        self.lastSeenMessagePK = latestPK
+        
+        if let sender = latestSender, let body = latestBody {
+            // Save contact for Quick Reply
+            self.lastSenderIdentifier = latestIdentifier
+            self.lastSenderJID = latestJID
             
             DispatchQueue.main.async {
+                // If a phone call is currently ringing, do NOT overwrite it!
+                if IslandState.shared.activeHUD?.type == .incomingCall {
+                    return
+                }
+                
+                let msg = WhatsAppMessage(id: latestPK, sender: sender, text: body)
                 self.lastMessage = msg
-                self.presentNotification(sender: rawSender, body: displayBody, avatarPath: avatarPath)
+                self.presentNotification(sender: sender, body: body, avatarPath: latestAvatar)
             }
         }
     }
@@ -360,7 +514,59 @@ public final class WhatsAppNotificationService: ObservableObject {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(trimmed, forType: .string)
-        openWhatsApp()
+        
+        // Extract digits from ZCONTACTIDENTIFIER or ZCONTACTJID
+        let phone: String? = {
+            if let ident = lastSenderIdentifier, ident.contains("@s.whatsapp.net") {
+                let digits = ident.components(separatedBy: "@").first?.filter { $0.isNumber }
+                if let d = digits, !d.isEmpty { return d }
+            }
+            if let jid = lastSenderJID, jid.contains("@s.whatsapp.net") {
+                let digits = jid.components(separatedBy: "@").first?.filter { $0.isNumber }
+                if let d = digits, !d.isEmpty { return d }
+            }
+            return nil
+        }()
+        
+        if let phone = phone,
+           let encoded = trimmed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+           let url = URL(string: "whatsapp://send?phone=\(phone)&text=\(encoded)") {
+            // 1. Direct chat URL: opens contact chat with text pre-filled
+            NSWorkspace.shared.open(url)
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.6) {
+                let script = """
+                tell application "WhatsApp" to activate
+                delay 0.15
+                tell application "System Events"
+                    tell process "WhatsApp"
+                        set frontmost to true
+                        delay 0.1
+                        key code 36
+                    end tell
+                end tell
+                """
+                var error: NSDictionary?
+                NSAppleScript(source: script)?.executeAndReturnError(&error)
+            }
+        } else {
+            // 2. Active chat: activate WhatsApp, paste clipboard (Cmd+V), and press Return (key code 36)
+            let script = """
+            tell application "WhatsApp" to activate
+            delay 0.25
+            tell application "System Events"
+                tell process "WhatsApp"
+                    set frontmost to true
+                    keystroke "v" using command down
+                    delay 0.1
+                    key code 36
+                end tell
+            end tell
+            """
+            DispatchQueue.global(qos: .userInitiated).async {
+                var error: NSDictionary?
+                NSAppleScript(source: script)?.executeAndReturnError(&error)
+            }
+        }
     }
     
     public func findAnyAvatar() -> String? {
@@ -381,94 +587,6 @@ public final class WhatsAppNotificationService: ObservableObject {
         let msg = WhatsAppMessage(id: Int64(Date().timeIntervalSince1970), sender: sender, text: text)
         self.lastMessage = msg
         presentNotification(sender: sender, body: text, avatarPath: findAnyAvatar())
-    }
-    
-    // MARK: - Incoming Call Detection & Presentation
-    
-    private func checkForNewCalls() {
-        guard isEnabled else { return }
-        guard FileManager.default.fileExists(atPath: callDBURL.path) else { return }
-        
-        var db: OpaquePointer?
-        let uri = "file:\(callDBURL.path)?mode=ro"
-        guard sqlite3_open_v2(uri, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI | SQLITE_OPEN_NOMUTEX, nil) == SQLITE_OK else {
-            return
-        }
-        defer { sqlite3_close(db) }
-        
-        let query = """
-        SELECT 
-            a.Z_PK,
-            a.ZINCOMING,
-            a.ZVIDEO,
-            COALESCE(c.ZGROUPCALLCREATORUSERJIDSTRING, p.ZJIDSTRING, ''),
-            COALESCE(c.ZOUTCOME, 0),
-            COALESCE(c.ZDURATION, 0.0),
-            COALESCE(a.ZMISSED, 0)
-        FROM ZWAAGGREGATECALLEVENT a
-        LEFT JOIN ZWACDCALLEVENT c ON c.Z1CALLEVENTS = a.Z_PK
-        LEFT JOIN ZWACDCALLEVENTPARTICIPANT p ON p.Z1PARTICIPANTS = c.Z_PK
-        WHERE a.Z_PK >= ?
-        ORDER BY a.Z_PK DESC
-        LIMIT 1;
-        """
-        
-        var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, query, -1, &stmt, nil) == SQLITE_OK else {
-            return
-        }
-        defer { sqlite3_finalize(stmt) }
-        
-        sqlite3_bind_int64(stmt, 1, lastSeenCallPK)
-        
-        if sqlite3_step(stmt) == SQLITE_ROW {
-            let pk = sqlite3_column_int64(stmt, 0)
-            let isIncoming = sqlite3_column_int(stmt, 1) == 1
-            let isVideo = sqlite3_column_int(stmt, 2) == 1
-            let rawJID = String(cString: sqlite3_column_text(stmt, 3))
-            let outcome = sqlite3_column_int(stmt, 4)
-            let duration = sqlite3_column_double(stmt, 5)
-            let missed = sqlite3_column_int(stmt, 6) == 1
-            
-            // Advance call baseline
-            self.lastSeenCallPK = pk
-            
-            let callerName = resolveCallerName(rawJID: rawJID)
-            let avatarPath = resolveAvatarPath(rawJID: rawJID)
-            
-            DispatchQueue.main.async {
-                if isIncoming {
-                    // 1. Call ended, missed, or declined
-                    if outcome == 4 || outcome == 5 || missed {
-                        if IslandState.shared.activeHUD?.type == .incomingCall {
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
-                                IslandState.shared.activeHUD = nil
-                            }
-                        }
-                    } else if outcome == 1 && duration > 0 {
-                        // 2. Call was answered and connected!
-                        if IslandState.shared.activeCall == nil {
-                            IslandState.shared.startActiveCall(
-                                caller: callerName,
-                                source: isVideo ? "WhatsApp Video" : "WhatsApp Audio",
-                                isVideo: isVideo,
-                                avatarImagePath: avatarPath
-                            )
-                        }
-                    } else {
-                        // 3. Call is currently ringing!
-                        if IslandState.shared.activeHUD?.type != .incomingCall {
-                            self.presentCallNotification(
-                                caller: callerName,
-                                isVideo: isVideo,
-                                source: isVideo ? "WhatsApp Video" : "from iPhone",
-                                avatarPath: avatarPath
-                            )
-                        }
-                    }
-                }
-            }
-        }
     }
     
     private func isCallVideo(stanzaID: String) -> Bool {

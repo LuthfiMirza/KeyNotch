@@ -96,6 +96,17 @@ public final class NotchWindowController: NSObject {
             }
             .store(in: &cancellables)
             
+        // Make panel key when WhatsApp Quick Reply HUD appears so user can type immediately
+        state.$activeHUD
+            .receive(on: RunLoop.main)
+            .sink { [weak self] hud in
+                guard let self = self, let panel = self.panel else { return }
+                if hud?.type == .whatsapp {
+                    panel.makeKey()
+                }
+            }
+            .store(in: &cancellables)
+            
         // True Zero-Draw: cut WindowServer compositing entirely when hidden / full-screen
         Publishers.CombineLatest4(
             state.$isHidden,
