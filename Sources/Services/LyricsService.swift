@@ -33,10 +33,10 @@ public final class LyricsService: ObservableObject {
     
     private func setupMediaObserver() {
         MediaRemoteService.shared.$title
-            .combineLatest(MediaRemoteService.shared.$artist)
+            .combineLatest(MediaRemoteService.shared.$artist, MediaRemoteService.shared.$duration)
             .receive(on: RunLoop.main)
-            .sink { [weak self] title, artist in
-                self?.handleTrackChanged(title: title, artist: artist)
+            .sink { [weak self] title, artist, duration in
+                self?.handleTrackChanged(title: title, artist: artist, duration: duration)
             }
             .store(in: &cancellables)
             
@@ -53,53 +53,69 @@ public final class LyricsService: ObservableObject {
             isLyricsExpanded.toggle()
         }
         if isLyricsExpanded && lyrics.isEmpty && !isLoading {
-            fetchLyrics(title: MediaRemoteService.shared.title, artist: MediaRemoteService.shared.artist)
+            fetchLyrics(
+                title: MediaRemoteService.shared.title,
+                artist: MediaRemoteService.shared.artist,
+                duration: MediaRemoteService.shared.duration
+            )
         }
     }
     
-    public func handleTrackChanged(title: String, artist: String) {
+    public func handleTrackChanged(title: String, artist: String, duration: Double = 0) {
         guard !title.isEmpty else {
             lyrics = []
             statusMessage = "No track playing"
+            lastFetchedTrack = ""
             return
         }
         
-        let key = "\(title) - \(artist)".lowercased()
+        let cleanedTitle = cleanTrackTitle(title)
+        let cleanedArtist = cleanTrackTitle(artist)
+        let effectiveDuration = duration > 0 ? duration : MediaRemoteService.shared.duration
+        let durationBucket = Int(effectiveDuration / 4.0) * 4
+        let key = "\(cleanedTitle) - \(cleanedArtist) - \(durationBucket)".lowercased()
+        
         guard key != lastFetchedTrack else { return }
         lastFetchedTrack = key
         
         if let cached = cache[key] {
             self.lyrics = cached
             self.statusMessage = cached.isEmpty ? "No lyrics found" : nil
+            self.updateCurrentLine(for: MediaRemoteService.shared.elapsedTime)
             return
         }
         
         if isLyricsExpanded {
-            fetchLyrics(title: title, artist: artist)
+            fetchLyrics(title: title, artist: artist, duration: effectiveDuration)
         } else {
             lyrics = []
         }
     }
     
-    public func fetchLyrics(title: String, artist: String) {
+    public func fetchLyrics(title: String, artist: String, duration: Double = 0) {
         guard !title.isEmpty else { return }
         
         let cleanedTitle = cleanTrackTitle(title)
         let cleanedArtist = cleanTrackTitle(artist)
-        let key = "\(cleanedTitle) - \(cleanedArtist)".lowercased()
+        let effectiveDuration = duration > 0 ? duration : MediaRemoteService.shared.duration
+        let durationBucket = Int(effectiveDuration / 4.0) * 4
+        let key = "\(cleanedTitle) - \(cleanedArtist) - \(durationBucket)".lowercased()
         
         if let cached = cache[key] {
             self.lyrics = cached
             self.statusMessage = cached.isEmpty ? "No lyrics found" : nil
+            self.updateCurrentLine(for: MediaRemoteService.shared.elapsedTime)
             return
         }
         
         isLoading = true
         statusMessage = "Fetching synchronized lyrics..."
         
-        // Build candidate combinations for YouTube and standard audio
-        var candidates: [(track: String, artist: String)] = []
-        candidates.append((track: cleanedTitle, artist: cleanedArtist))
+        // Build candidate search queries
+        var searchQueries: [String] = []
+        if !cleanedArtist.isEmpty && cleanedArtist.lowercased() != "unknown artist" {
+            searchQueries.append("\(cleanedTitle) \(cleanedArtist)")
+        }
         
         for sep in [" - ", " – ", " — "] {
             if title.contains(sep) {
@@ -107,27 +123,125 @@ public final class LyricsService: ObservableObject {
                 if parts.count >= 2 {
                     let p0 = cleanTrackTitle(parts[0])
                     let p1 = cleanTrackTitle(parts[1...].joined(separator: sep))
-                    candidates.append((track: p0, artist: p1))
-                    candidates.append((track: p1, artist: p0))
+                    searchQueries.append("\(p0) \(p1)")
+                    searchQueries.append("\(p1) \(p0)")
                 }
             }
         }
+        searchQueries.append(cleanedTitle)
         
-        tryCandidate(candidates, at: 0, cacheKey: key, fallbackQuery: cleanedTitle)
+        var uniqueQueries: [String] = []
+        for q in searchQueries {
+            let trimmed = q.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty && !uniqueQueries.contains(trimmed) {
+                uniqueQueries.append(trimmed)
+            }
+        }
+        
+        trySearchQueries(
+            queries: uniqueQueries,
+            at: 0,
+            targetArtist: cleanedArtist,
+            targetDuration: effectiveDuration,
+            cacheKey: key,
+            rawTitle: cleanedTitle
+        )
     }
     
-    private func tryCandidate(_ candidates: [(track: String, artist: String)], at index: Int, cacheKey: String, fallbackQuery: String) {
-        guard index < candidates.count else {
-            // All direct gets exhausted; search via query
-            fallbackSearchLyrics(query: fallbackQuery, cacheKey: cacheKey)
+    private func trySearchQueries(
+        queries: [String],
+        at index: Int,
+        targetArtist: String,
+        targetDuration: Double,
+        cacheKey: String,
+        rawTitle: String
+    ) {
+        guard index < queries.count else {
+            // All search queries exhausted; try direct api/get as fallback
+            tryDirectAPIGet(title: rawTitle, artist: targetArtist, duration: targetDuration, cacheKey: cacheKey)
             return
         }
         
-        let c = candidates[index]
-        guard let encodedTrack = c.track.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let encodedArtist = c.artist.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let url = URL(string: "https://lrclib.net/api/get?track_name=\(encodedTrack)&artist_name=\(encodedArtist)") else {
-            tryCandidate(candidates, at: index + 1, cacheKey: cacheKey, fallbackQuery: fallbackQuery)
+        let query = queries[index]
+        guard let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let url = URL(string: "https://lrclib.net/api/search?q=\(encoded)") else {
+            trySearchQueries(
+                queries: queries,
+                at: index + 1,
+                targetArtist: targetArtist,
+                targetDuration: targetDuration,
+                cacheKey: cacheKey,
+                rawTitle: rawTitle
+            )
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.setValue("KeyNotch Dynamic Island App (macOS)", forHTTPHeaderField: "User-Agent")
+        request.timeoutInterval = 4.5
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                
+                if let data = data,
+                   let items = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+                   !items.isEmpty {
+                    
+                    let scored = items.map { item -> (item: [String: Any], score: Double) in
+                        let sc = self.calculateCandidateScore(
+                            item: item,
+                            targetArtist: targetArtist,
+                            targetDuration: targetDuration
+                        )
+                        return (item: item, score: sc)
+                    }.sorted { $0.score < $1.score }
+                    
+                    if let best = scored.first, best.score < 500.0 {
+                        if let synced = best.item["syncedLyrics"] as? String, !synced.isEmpty {
+                            let parsed = self.parseLRC(content: synced)
+                            if !parsed.isEmpty {
+                                self.cache[cacheKey] = parsed
+                                self.lyrics = parsed
+                                self.isLoading = false
+                                self.statusMessage = nil
+                                self.updateCurrentLine(for: MediaRemoteService.shared.elapsedTime)
+                                return
+                            }
+                        }
+                    }
+                }
+                
+                // Fallback to next query
+                self.trySearchQueries(
+                    queries: queries,
+                    at: index + 1,
+                    targetArtist: targetArtist,
+                    targetDuration: targetDuration,
+                    cacheKey: cacheKey,
+                    rawTitle: rawTitle
+                )
+            }
+        }.resume()
+    }
+    
+    private func tryDirectAPIGet(title: String, artist: String, duration: Double, cacheKey: String) {
+        guard let encodedTrack = title.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+            finishWithNoLyrics(cacheKey: cacheKey)
+            return
+        }
+        
+        var urlString = "https://lrclib.net/api/get?track_name=\(encodedTrack)"
+        if !artist.isEmpty && artist.lowercased() != "unknown artist",
+           let encodedArtist = artist.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
+            urlString += "&artist_name=\(encodedArtist)"
+        }
+        if duration > 0 {
+            urlString += "&duration=\(Int(duration))"
+        }
+        
+        guard let url = URL(string: urlString) else {
+            finishWithNoLyrics(cacheKey: cacheKey)
             return
         }
         
@@ -150,67 +264,62 @@ public final class LyricsService: ObservableObject {
                     }
                 }
                 
-                // Try next candidate
-                self.tryCandidate(candidates, at: index + 1, cacheKey: cacheKey, fallbackQuery: fallbackQuery)
+                self.finishWithNoLyrics(cacheKey: cacheKey)
             }
         }.resume()
     }
     
-    private func fallbackSearchLyrics(query: String, cacheKey: String) {
-        guard let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let url = URL(string: "https://lrclib.net/api/search?q=\(encoded)") else {
-            self.isLoading = false
-            self.statusMessage = "No lyrics found"
-            return
+    private func finishWithNoLyrics(cacheKey: String) {
+        self.cache[cacheKey] = []
+        self.lyrics = []
+        self.isLoading = false
+        self.statusMessage = "No synchronized lyrics found"
+    }
+    
+    private func calculateCandidateScore(item: [String: Any], targetArtist: String, targetDuration: Double) -> Double {
+        let synced = item["syncedLyrics"] as? String
+        guard let syncedLyrics = synced, !syncedLyrics.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return 999999.0
         }
         
-        var request = URLRequest(url: url)
-        request.setValue("KeyNotch Dynamic Island App (macOS)", forHTTPHeaderField: "User-Agent")
-        request.timeoutInterval = 5.0
+        let candidateArtist = (item["artistName"] as? String ?? "").lowercased()
+        let candidateTrack = (item["trackName"] as? String ?? "").lowercased()
+        let candidateDuration = item["duration"] as? Double ?? 0.0
         
-        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
-            DispatchQueue.main.async {
-                guard let self = self else { return }
-                self.isLoading = false
-                
-                if let data = data,
-                   let items = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
-                    for item in items {
-                        if let synced = item["syncedLyrics"] as? String, !synced.isEmpty {
-                            let parsed = self.parseLRC(content: synced)
-                            if !parsed.isEmpty {
-                                self.cache[cacheKey] = parsed
-                                self.lyrics = parsed
-                                self.statusMessage = nil
-                                self.updateCurrentLine(for: MediaRemoteService.shared.elapsedTime)
-                                return
-                            }
-                        }
-                    }
-                    
-                    // Plain lyrics fallback if no synced version
-                    for item in items {
-                        if let plain = item["plainLyrics"] as? String, !plain.isEmpty {
-                            let lines = plain.components(separatedBy: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-                            let parsed = lines.enumerated().map { i, text in
-                                LyricLine(id: i, time: Double(i * 4), text: text)
-                            }
-                            if !parsed.isEmpty {
-                                self.cache[cacheKey] = parsed
-                                self.lyrics = parsed
-                                self.statusMessage = nil
-                                self.updateCurrentLine(for: MediaRemoteService.shared.elapsedTime)
-                                return
-                            }
-                        }
-                    }
-                }
-                
-                self.cache[cacheKey] = []
-                self.lyrics = []
-                self.statusMessage = "No synchronized lyrics found"
+        var score: Double = 0.0
+        
+        // 1. Artist matching
+        if !targetArtist.isEmpty && targetArtist.lowercased() != "unknown artist" {
+            let targetArt = targetArtist.lowercased()
+            if candidateArtist == targetArt {
+                score += 0.0
+            } else if candidateArtist.contains(targetArt) || targetArt.contains(candidateArtist) {
+                score += 10.0
+            } else {
+                score += 260.0 // Artist mismatch penalty
             }
-        }.resume()
+        }
+        
+        // 2. Duration matching
+        if targetDuration > 0 && candidateDuration > 0 {
+            let diff = abs(candidateDuration - targetDuration)
+            if diff <= 2.5 {
+                score += 0.0 // Virtually identical cut
+            } else if diff <= 6.0 {
+                score += diff * 1.5
+            } else {
+                score += diff * 4.0 // Heavily penalize cut / extended / radio versions
+            }
+        }
+        
+        // 3. Unwanted versions penalty
+        for unwanted in ["live", "acoustic", "remix", "tribute", "karaoke", "instrumental", "cover"] {
+            if candidateTrack.contains(unwanted) && !targetArtist.lowercased().contains(unwanted) {
+                score += 60.0
+            }
+        }
+        
+        return score
     }
     
     private func parseLRCLIBResponse(data: Data) -> [LyricLine]? {
@@ -223,7 +332,6 @@ public final class LyricsService: ObservableObject {
         }
         
         if let plain = json["plainLyrics"] as? String, !plain.isEmpty {
-            // Unsynced fallback
             let lines = plain.components(separatedBy: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
             return lines.enumerated().map { index, line in
                 LyricLine(id: index, time: Double(index * 4), text: line)
@@ -234,9 +342,8 @@ public final class LyricsService: ObservableObject {
     }
     
     public func parseLRC(content: String) -> [LyricLine] {
-        var result: [LyricLine] = []
+        var rawParsed: [(time: Double, text: String)] = []
         let rawLines = content.components(separatedBy: "\n")
-        var idCounter = 0
         
         for rawLine in rawLines {
             let trimmed = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -245,29 +352,52 @@ public final class LyricsService: ObservableObject {
             // Format: [mm:ss.xx] or [mm:ss]
             if let closingBracket = trimmed.firstIndex(of: "]") {
                 let timeString = String(trimmed[trimmed.index(after: trimmed.startIndex)..<closingBracket])
-                let lyricText = String(trimmed[trimmed.index(after: closingBracket)...]).trimmingCharacters(in: .whitespaces)
+                var lyricText = String(trimmed[trimmed.index(after: closingBracket)...]).trimmingCharacters(in: .whitespaces)
                 
                 let parts = timeString.components(separatedBy: ":")
                 if parts.count == 2,
                    let minutes = Double(parts[0]),
                    let seconds = Double(parts[1]) {
                     let totalSeconds = (minutes * 60.0) + seconds
-                    if !lyricText.isEmpty {
-                        result.append(LyricLine(id: idCounter, time: totalSeconds, text: lyricText))
-                        idCounter += 1
+                    
+                    let lower = lyricText.lowercased()
+                    if lyricText.isEmpty || lower.contains("break and solo") || lower.contains("guitar solo") || lower == "(solo)" || lower == "[solo]" || lower == "(instrumental)" || lower == "[instrumental]" {
+                        lyricText = "♪ ♪ ♪"
                     }
+                    
+                    // Avoid duplicate consecutive musical note lines
+                    if lyricText == "♪ ♪ ♪" && rawParsed.last?.text == "♪ ♪ ♪" {
+                        continue
+                    }
+                    
+                    rawParsed.append((time: totalSeconds, text: lyricText))
                 }
             }
         }
+        
+        rawParsed.sort { $0.time < $1.time }
+        
+        // Insert intro indicator if first vocal line starts > 6.0 seconds in
+        if let first = rawParsed.first, first.time > 6.0, first.text != "♪ ♪ ♪" {
+            rawParsed.insert((time: 0.0, text: "♪ ♪ ♪"), at: 0)
+        }
+        
+        var result: [LyricLine] = []
+        for (i, item) in rawParsed.enumerated() {
+            result.append(LyricLine(id: i, time: item.time, text: item.text))
+        }
+        
         return result
     }
     
     private func updateCurrentLine(for elapsed: Double) {
         guard isLyricsExpanded, !lyrics.isEmpty else { return }
         
+        // 0.22s anticipation offset compensates for Bluetooth buffer latency & vocal onset
+        let adjustedElapsed = elapsed + 0.22
         var foundIndex = 0
         for (i, line) in lyrics.enumerated() {
-            if line.time <= elapsed {
+            if line.time <= adjustedElapsed {
                 foundIndex = i
             } else {
                 break
@@ -287,9 +417,14 @@ public final class LyricsService: ObservableObject {
             "(official music video", "[official music video",
             "(official audio", "[official audio",
             "(lyric video", "[lyric video",
+            "(visualizer", "[visualizer",
             "(video)", "(audio)",
+            "(hd)", "[hd]", "(4k", "[4k",
             "(live", "[live",
-            " - remastered", " [remastered]"
+            " - remastered", " [remastered]", "(remastered",
+            " - single version", "(single version",
+            " - album version", "(album version",
+            " - radio edit", "(radio edit"
         ]
         
         for pat in patterns {
@@ -297,6 +432,8 @@ public final class LyricsService: ObservableObject {
                 cleaned = String(cleaned[..<range.lowerBound])
             }
         }
+        
+        cleaned = cleaned.trimmingCharacters(in: CharacterSet(charactersIn: " -–—\"'"))
         return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

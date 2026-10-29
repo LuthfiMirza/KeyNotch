@@ -43,7 +43,7 @@ public struct MusicTabView: View {
         .onAppear {
             media.refreshNowPlaying()
             if lyrics.lyrics.isEmpty && !lyrics.isLoading && !media.title.isEmpty {
-                lyrics.fetchLyrics(title: media.title, artist: media.artist)
+                lyrics.fetchLyrics(title: media.title, artist: media.artist, duration: media.duration)
             }
         }
     }
@@ -194,7 +194,7 @@ public struct MusicTabView: View {
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(.white.opacity(0.55))
                     Button(action: {
-                        lyrics.fetchLyrics(title: media.title, artist: media.artist)
+                        lyrics.fetchLyrics(title: media.title, artist: media.artist, duration: media.duration)
                     }) {
                         HStack(spacing: 4) {
                             Image(systemName: "arrow.clockwise")

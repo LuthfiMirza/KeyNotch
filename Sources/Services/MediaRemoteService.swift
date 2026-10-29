@@ -217,7 +217,8 @@ public final class MediaRemoteService: ObservableObject {
                 if titleChanged {
                     LyricsService.shared.fetchLyrics(
                         title: newTitle,
-                        artist: newArtist
+                        artist: newArtist,
+                        duration: newDuration
                     )
                 }
             } else {
@@ -309,7 +310,8 @@ public final class MediaRemoteService: ObservableObject {
                             if titleChanged {
                                 LyricsService.shared.fetchLyrics(
                                     title: songTitle,
-                                    artist: songArtist
+                                    artist: songArtist,
+                                    duration: songDuration
                                 )
                             }
                         }
