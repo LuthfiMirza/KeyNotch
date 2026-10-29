@@ -10,12 +10,22 @@ public struct ControlsMediaTabView: View {
     @ObservedObject var bluetooth = BluetoothService.shared
     @ObservedObject var brightness = BrightnessService.shared
     @ObservedObject var privacy = PrivacyGuardService.shared
+    @ObservedObject var network = NetworkMonitorService.shared
     
     @State private var wifiName: String = "Wi-Fi"
     @State private var isWifiOn: Bool = true
     @State private var isBluetoothOn: Bool = true
     @State private var isFocusActive: Bool = false
     @State private var activeSliderMode: SliderMode = .volume
+    
+    private var pingColor: Color {
+        switch network.pingQuality {
+        case .excellent, .good: return .green
+        case .fair: return .yellow
+        case .poor: return .red
+        case .unknown: return .gray
+        }
+    }
     
     public enum SliderMode {
         case volume
@@ -50,6 +60,7 @@ public struct ControlsMediaTabView: View {
             refreshWiFi()
             brightness.readCurrentBrightness()
             hud.readCurrentVolume()
+            network.sampleNetwork()
         }
     }
     
@@ -60,8 +71,9 @@ public struct ControlsMediaTabView: View {
             // Wi-Fi Card
             Button(action: {
                 refreshWiFi()
+                network.sampleNetwork()
             }) {
-                HStack(spacing: 12) {
+                HStack(spacing: 10) {
                     ZStack {
                         Circle()
                             .fill(isWifiOn ? Color.blue : Color.white.opacity(0.15))
@@ -80,7 +92,28 @@ public struct ControlsMediaTabView: View {
                             .foregroundColor(.white.opacity(0.65))
                             .lineLimit(1)
                     }
-                    Spacer()
+                    
+                    Spacer(minLength: 4)
+                    
+                    // Live Network Speed & Ping Quality Badge
+                    VStack(alignment: .trailing, spacing: 2) {
+                        HStack(spacing: 3) {
+                            Circle()
+                                .fill(pingColor)
+                                .frame(width: 5, height: 5)
+                            Text(network.pingString)
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                .foregroundColor(.white.opacity(0.9))
+                        }
+                        HStack(spacing: 2) {
+                            Image(systemName: "arrow.down")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundColor(.green)
+                            Text(network.downloadSpeedString)
+                                .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                                .foregroundColor(.white.opacity(0.75))
+                        }
+                    }
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
@@ -237,62 +270,116 @@ public struct ControlsMediaTabView: View {
         }
     }
     
-    // MARK: - Row 3: CPU & RAM Telemetry Bar
+    // MARK: - Row 3: CPU, Network Speedometer, Ping Radar, Spy Guard & RAM Telemetry Bar
     
     private var telemetryRow: some View {
-        HStack {
+        HStack(spacing: 8) {
             // CPU Metric
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 Image(systemName: "cpu")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 12.5, weight: .bold))
                     .foregroundColor(.green)
                 Text("CPU")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundColor(.white)
-                
-                Spacer()
-                
                 Text(String(format: "%.0f%%", telemetry.cpuUsagePercent))
                     .font(.system(size: 12, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
             }
-            .frame(maxWidth: .infinity)
             
-            // Center Spy Guard Status / Test Pill
-            Button(action: {
-                privacy.toggleSimulateSpyGuard()
-            }) {
-                HStack(spacing: 3) {
-                    Image(systemName: (privacy.isCameraInUse || privacy.isMicInUse) ? "shield.fill" : "shield")
-                        .font(.system(size: 8.5, weight: .bold))
-                    Text((privacy.isCameraInUse || privacy.isMicInUse) ? "Guarding" : "Spy Guard")
-                        .font(.system(size: 9.5, weight: .semibold))
+            Spacer(minLength: 4)
+            
+            // Center Cluster: Live Network Speedometer + Ping Latency Radar + Spy Guard
+            HStack(spacing: 5) {
+                // Network Speedometer Pill (Download & Upload) - Click to toggle compact notch view
+                Button(action: {
+                    network.toggleShowInCompactNotch()
+                }) {
+                    HStack(spacing: 5) {
+                        HStack(spacing: 2) {
+                            Image(systemName: "arrow.down")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundColor(.green)
+                            Text(network.downloadSpeedString)
+                                .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                                .foregroundColor(.white.opacity(0.9))
+                        }
+                        
+                        HStack(spacing: 2) {
+                            Image(systemName: "arrow.up")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundColor(.cyan)
+                            Text(network.uploadSpeedString)
+                                .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                                .foregroundColor(.white.opacity(0.9))
+                        }
+                    }
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3.5)
+                    .background(network.showInCompactNotch ? Color.cyan.opacity(0.18) : Color.white.opacity(0.06))
+                    .overlay(
+                        Capsule()
+                            .stroke(network.showInCompactNotch ? Color.cyan.opacity(0.4) : Color.clear, lineWidth: 1)
+                    )
+                    .clipShape(Capsule())
                 }
-                .foregroundColor((privacy.isCameraInUse || privacy.isMicInUse) ? Color.green : Color.white.opacity(0.45))
-                .padding(.horizontal, 7)
-                .padding(.vertical, 2.5)
-                .background(Color.white.opacity(0.06))
-                .clipShape(Capsule())
+                .buttonStyle(PlainButtonStyle())
+                .help(network.showInCompactNotch ? "Pin in compact notch is ON (click to disable)" : "Click to pin live network speed inside compact notch")
+                
+                // Ping Radar Pill - Click to ping immediate refresh
+                Button(action: {
+                    network.sampleNetwork()
+                }) {
+                    HStack(spacing: 3.5) {
+                        Circle()
+                            .fill(pingColor)
+                            .frame(width: 5, height: 5)
+                        Text(network.pingString)
+                            .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                            .foregroundColor(.white.opacity(0.9))
+                    }
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3.5)
+                    .background(Color.white.opacity(0.06))
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help("Click to refresh Ping Latency Radar (TCP 1.1.1.1 / 8.8.8.8)")
+                
+                // Center Spy Guard Status / Test Pill
+                Button(action: {
+                    privacy.toggleSimulateSpyGuard()
+                }) {
+                    HStack(spacing: 3) {
+                        Image(systemName: (privacy.isCameraInUse || privacy.isMicInUse) ? "shield.fill" : "shield")
+                            .font(.system(size: 8.5, weight: .bold))
+                        Text((privacy.isCameraInUse || privacy.isMicInUse) ? "Guarding" : "Spy Guard")
+                            .font(.system(size: 9.5, weight: .semibold))
+                    }
+                    .foregroundColor((privacy.isCameraInUse || privacy.isMicInUse) ? Color.green : Color.white.opacity(0.45))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3.5)
+                    .background(Color.white.opacity(0.06))
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help("Click to test Privacy Spy Guard")
             }
-            .buttonStyle(PlainButtonStyle())
-            .help("Click to test Privacy Spy Guard")
+            
+            Spacer(minLength: 4)
             
             // RAM Metric
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 Image(systemName: "memorychip")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 12.5, weight: .bold))
                     .foregroundColor(.blue)
                 Text("RAM")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundColor(.white)
-                
-                Spacer()
-                
                 Text(String(format: "%.1f/%.0fGB", telemetry.usedRAMGB, telemetry.totalRAMGB))
                     .font(.system(size: 12, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
             }
-            .frame(maxWidth: .infinity)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 2)
