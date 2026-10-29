@@ -29,6 +29,7 @@ public enum HUDType {
     case bluetooth
     case custom
     case whatsapp
+    case incomingCall
 }
 
 public struct HUDPayload: Identifiable, Equatable {

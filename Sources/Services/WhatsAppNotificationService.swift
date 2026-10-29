@@ -44,12 +44,16 @@ public final class WhatsAppNotificationService: ObservableObject {
     private let queue = DispatchQueue(label: "com.keynotch.whatsappmonitor", qos: .utility)
     private var dirSource: DispatchSourceFileSystemObject?
     private var walSource: DispatchSourceFileSystemObject?
+    private var callWalSource: DispatchSourceFileSystemObject?
     private var debounceWorkItem: DispatchWorkItem?
     private var lastSeenPK: Int64 = 0
+    private var lastSeenCallPK: Int64 = 0
     
     private let sharedContainerURL: URL
     private let dbURL: URL
     private let walURL: URL
+    private let callDBURL: URL
+    private let callWalURL: URL
     
     private init() {
         self.isEnabled = UserDefaults.standard.object(forKey: "keynotch_whatsapp_notifications_enabled") as? Bool ?? true
@@ -59,9 +63,11 @@ public final class WhatsAppNotificationService: ObservableObject {
             .appendingPathComponent("Library/Group Containers/group.net.whatsapp.WhatsApp.shared")
         self.dbURL = sharedContainerURL.appendingPathComponent("ChatStorage.sqlite")
         self.walURL = sharedContainerURL.appendingPathComponent("ChatStorage.sqlite-wal")
+        self.callDBURL = sharedContainerURL.appendingPathComponent("CallHistory.sqlite")
+        self.callWalURL = sharedContainerURL.appendingPathComponent("CallHistory.sqlite-wal")
         
         if isEnabled {
-            // Establish baseline on background queue so we don't notify past messages
+            // Establish baseline on background queue so we don't notify past messages or calls
             queue.async { [weak self] in
                 self?.establishBaseline()
                 self?.startMonitoring()
@@ -100,8 +106,9 @@ public final class WhatsAppNotificationService: ObservableObject {
             self.dirSource = src
         }
         
-        // 2. Monitor WAL file directly if it exists
+        // 2. Monitor WAL files directly if they exist
         attachWALSourceIfNeeded()
+        attachCallWALSourceIfNeeded()
         
         DispatchQueue.main.async {
             self.isMonitoring = true
@@ -131,11 +138,36 @@ public final class WhatsAppNotificationService: ObservableObject {
         self.walSource = src
     }
     
+    private func attachCallWALSourceIfNeeded() {
+        guard callWalSource == nil else { return }
+        let walPath = callWalURL.path
+        guard FileManager.default.fileExists(atPath: walPath) else { return }
+        
+        let walFD = open(walPath, O_EVTONLY)
+        guard walFD >= 0 else { return }
+        
+        let src = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: walFD,
+            eventMask: [.write, .extend],
+            queue: queue
+        )
+        src.setEventHandler { [weak self] in
+            self?.scheduleCheck()
+        }
+        src.setCancelHandler {
+            close(walFD)
+        }
+        src.resume()
+        self.callWalSource = src
+    }
+    
     public func stopMonitoring() {
         dirSource?.cancel()
         dirSource = nil
         walSource?.cancel()
         walSource = nil
+        callWalSource?.cancel()
+        callWalSource = nil
         debounceWorkItem?.cancel()
         debounceWorkItem = nil
         
@@ -152,27 +184,43 @@ public final class WhatsAppNotificationService: ObservableObject {
         let workItem = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
             self.checkForNewMessages()
+            self.checkForNewCalls()
             self.attachWALSourceIfNeeded()
+            self.attachCallWALSourceIfNeeded()
         }
         self.debounceWorkItem = workItem
         queue.asyncAfter(deadline: .now() + 0.35, execute: workItem)
     }
     
     private func establishBaseline() {
+        // 1. Messages baseline
         var db: OpaquePointer?
         let uri = "file:\(dbURL.path)?mode=ro"
-        guard sqlite3_open_v2(uri, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI | SQLITE_OPEN_NOMUTEX, nil) == SQLITE_OK else {
-            return
-        }
-        defer { sqlite3_close(db) }
-        
-        var stmt: OpaquePointer?
-        let sql = "SELECT MAX(Z_PK) FROM ZWAMESSAGE WHERE ZISFROMME = 0;"
-        if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
-            if sqlite3_step(stmt) == SQLITE_ROW {
-                self.lastSeenPK = sqlite3_column_int64(stmt, 0)
+        if sqlite3_open_v2(uri, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI | SQLITE_OPEN_NOMUTEX, nil) == SQLITE_OK {
+            var stmt: OpaquePointer?
+            let sql = "SELECT MAX(Z_PK) FROM ZWAMESSAGE WHERE ZISFROMME = 0;"
+            if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+                if sqlite3_step(stmt) == SQLITE_ROW {
+                    self.lastSeenPK = sqlite3_column_int64(stmt, 0)
+                }
+                sqlite3_finalize(stmt)
             }
-            sqlite3_finalize(stmt)
+            sqlite3_close(db)
+        }
+        
+        // 2. Call history baseline
+        var callDB: OpaquePointer?
+        let callUri = "file:\(callDBURL.path)?mode=ro"
+        if sqlite3_open_v2(callUri, &callDB, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI | SQLITE_OPEN_NOMUTEX, nil) == SQLITE_OK {
+            var stmt: OpaquePointer?
+            let sql = "SELECT MAX(Z_PK) FROM ZWAAGGREGATECALLEVENT;"
+            if sqlite3_prepare_v2(callDB, sql, -1, &stmt, nil) == SQLITE_OK {
+                if sqlite3_step(stmt) == SQLITE_ROW {
+                    self.lastSeenCallPK = sqlite3_column_int64(stmt, 0)
+                }
+                sqlite3_finalize(stmt)
+            }
+            sqlite3_close(callDB)
         }
     }
     
@@ -278,5 +326,113 @@ public final class WhatsAppNotificationService: ObservableObject {
         let msg = WhatsAppMessage(id: Int64(Date().timeIntervalSince1970), sender: sender, text: text)
         self.lastMessage = msg
         presentNotification(sender: sender, body: text)
+    }
+    
+    // MARK: - Incoming Call Detection & Presentation
+    
+    private func checkForNewCalls() {
+        guard isEnabled else { return }
+        guard FileManager.default.fileExists(atPath: callDBURL.path) else { return }
+        
+        var db: OpaquePointer?
+        let uri = "file:\(callDBURL.path)?mode=ro"
+        guard sqlite3_open_v2(uri, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI | SQLITE_OPEN_NOMUTEX, nil) == SQLITE_OK else {
+            return
+        }
+        defer { sqlite3_close(db) }
+        
+        let query = """
+        SELECT 
+            a.Z_PK,
+            a.ZINCOMING,
+            a.ZVIDEO,
+            COALESCE(c.ZGROUPCALLCREATORUSERJIDSTRING, p.ZJIDSTRING, '')
+        FROM ZWAAGGREGATECALLEVENT a
+        LEFT JOIN ZWACDCALLEVENT c ON c.Z1CALLEVENTS = a.Z_PK
+        LEFT JOIN ZWACDCALLEVENTPARTICIPANT p ON p.Z1PARTICIPANTS = c.Z_PK
+        WHERE a.ZINCOMING = 1 AND a.Z_PK > ?
+        ORDER BY a.Z_PK DESC
+        LIMIT 1;
+        """
+        
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, query, -1, &stmt, nil) == SQLITE_OK else {
+            return
+        }
+        defer { sqlite3_finalize(stmt) }
+        
+        sqlite3_bind_int64(stmt, 1, lastSeenCallPK)
+        
+        if sqlite3_step(stmt) == SQLITE_ROW {
+            let pk = sqlite3_column_int64(stmt, 0)
+            let isVideo = sqlite3_column_int(stmt, 2) == 1
+            let rawJID = String(cString: sqlite3_column_text(stmt, 3))
+            
+            // Advance call baseline
+            self.lastSeenCallPK = pk
+            
+            let callerName = resolveCallerName(rawJID: rawJID)
+            
+            DispatchQueue.main.async {
+                self.presentCallNotification(caller: callerName, isVideo: isVideo)
+            }
+        }
+    }
+    
+    private func resolveCallerName(rawJID: String) -> String {
+        let trimmed = rawJID.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return "Panggilan WhatsApp"
+        }
+        
+        // Strip domain like @lid or @s.whatsapp.net to get user ID
+        let cleanJID = trimmed.components(separatedBy: "@").first ?? trimmed
+        
+        var chatDB: OpaquePointer?
+        let uri = "file:\(dbURL.path)?mode=ro"
+        guard sqlite3_open_v2(uri, &chatDB, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI | SQLITE_OPEN_NOMUTEX, nil) == SQLITE_OK else {
+            return cleanJID.isEmpty ? "Panggilan WhatsApp" : cleanJID
+        }
+        defer { sqlite3_close(chatDB) }
+        
+        let query = "SELECT ZPARTNERNAME FROM ZWACHATSESSION WHERE ZCONTACTJID LIKE '%' || ? || '%' LIMIT 1;"
+        var stmt: OpaquePointer?
+        if sqlite3_prepare_v2(chatDB, query, -1, &stmt, nil) == SQLITE_OK {
+            sqlite3_bind_text(stmt, 1, (cleanJID as NSString).utf8String, -1, nil)
+            if sqlite3_step(stmt) == SQLITE_ROW {
+                if let text = sqlite3_column_text(stmt, 0) {
+                    let name = String(cString: text).trimmingCharacters(in: .whitespacesAndNewlines)
+                    sqlite3_finalize(stmt)
+                    if !name.isEmpty {
+                        return name
+                    }
+                }
+            }
+            sqlite3_finalize(stmt)
+        }
+        
+        return cleanJID.isEmpty ? "Panggilan WhatsApp" : cleanJID
+    }
+    
+    public func presentCallNotification(caller: String, isVideo: Bool) {
+        let subtitle = isVideo ? "Panggilan Video Masuk..." : "Panggilan Suara Masuk..."
+        let icon = isVideo ? "video.fill" : "phone.arrow.down.left.fill"
+        let detail = isVideo ? "Video Call" : "Voice Call"
+        
+        IslandState.shared.triggerHUD(
+            HUDPayload(
+                type: .incomingCall,
+                title: caller,
+                subtitle: subtitle,
+                iconName: icon,
+                rightDetail: detail,
+                isSuccess: true
+            ),
+            duration: 15.0 // Ringing lasts 15s or until Answer/Decline
+        )
+    }
+    
+    public func simulateIncomingCall(caller: String = "Eca 🥰", isVideo: Bool = false) {
+        presentCallNotification(caller: caller, isVideo: isVideo)
     }
 }
