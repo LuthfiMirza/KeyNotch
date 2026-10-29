@@ -22,8 +22,10 @@ public final class NotchPanel: NSPanel {
     }
     
     public override var canBecomeKey: Bool {
-        // Allow becoming key so TextField (Notes tab) can receive text input
-        return IslandState.shared.isExpanded && IslandState.shared.selectedTab == .notes
+        // Allow becoming key so TextField (Notes tab or WhatsApp Quick Reply) can receive text input
+        let isNotesActive = IslandState.shared.isExpanded && IslandState.shared.selectedTab == .notes
+        let isWhatsAppReplyActive = IslandState.shared.activeHUD?.type == .whatsapp
+        return isNotesActive || isWhatsAppReplyActive
     }
     
     public override var canBecomeMain: Bool {

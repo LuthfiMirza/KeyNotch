@@ -46,7 +46,7 @@ public struct HUDToastView: View {
                 standardToastView
             }
         }
-        .frame(height: payload.type == .battery ? 52 : (payload.type == .bluetooth ? 48 : (payload.type == .whatsapp ? 54 : (payload.type == .incomingCall ? 62 : 46))))
+        .frame(height: payload.type == .battery ? 52 : (payload.type == .bluetooth ? 48 : (payload.type == .whatsapp ? 96 : (payload.type == .incomingCall ? 66 : 46))))
     }
     
     // MARK: - 1. Charging Toast (Enlarged Morphing Capsule 370x52)
@@ -266,86 +266,124 @@ public struct HUDToastView: View {
         }
     }
     
-    // MARK: - 5. WhatsApp Incoming Message Banner (Morphing Capsule 390x54)
+    // MARK: - 4. WhatsApp Message Toast with Quick Reply (Screenshot 3 & 5)
     
     private var whatsAppToastView: some View {
-        Button(action: {
-            WhatsAppNotificationService.shared.openWhatsApp()
-            IslandState.shared.activeHUD = nil
-        }) {
-            HStack(spacing: 12) {
-                // Glowing WhatsApp App Icon Badge
-                ZStack {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [Color(red: 0.15, green: 0.83, blue: 0.40), Color(red: 0.08, green: 0.68, blue: 0.32)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 34, height: 34)
-                        .shadow(color: Color(red: 0.15, green: 0.83, blue: 0.40).opacity(0.4), radius: 4)
-                    
-                    Image(systemName: "message.fill")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundColor(.white)
-                }
-                .padding(.leading, 14)
-                
-                // Contact / Group Name & Message Preview
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text(payload.title)
-                            .font(.system(size: 13.5, weight: .bold))
-                            .foregroundColor(.white)
-                            .lineLimit(1)
-                        
-                        Text("WhatsApp")
-                            .font(.system(size: 8.5, weight: .bold))
-                            .foregroundColor(Color(red: 0.15, green: 0.83, blue: 0.40))
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1.5)
-                            .background(Color(red: 0.15, green: 0.83, blue: 0.40).opacity(0.18))
-                            .clipShape(Capsule())
-                    }
-                    
-                    Text(payload.subtitle ?? "Pesan baru")
-                        .font(.system(size: 11.5, weight: .regular))
-                        .foregroundColor(.white.opacity(0.85))
-                        .lineLimit(1)
-                }
-                
-                Spacer(minLength: 8)
-                
-                // Action: "Open / Buka" Pill
-                HStack(spacing: 3) {
-                    Text("Buka")
-                        .font(.system(size: 10, weight: .bold))
-                    Image(systemName: "arrow.up.right")
-                        .font(.system(size: 8, weight: .bold))
-                }
-                .foregroundColor(.white.opacity(0.85))
-                .padding(.horizontal, 9)
-                .padding(.vertical, 5)
-                .background(Color.white.opacity(0.12))
-                .clipShape(Capsule())
-                .padding(.trailing, 14)
-            }
-        }
-        .buttonStyle(PlainButtonStyle())
+        WhatsAppToastContentView(payload: payload)
     }
     
-    // MARK: - 5. Incoming Call Toast (Enlarged Morphing Capsule 420x62)
+    // MARK: - 5. Incoming Call Toast (Screenshot 1)
     
     private var incomingCallToastView: some View {
         IncomingCallToastContentView(payload: payload)
     }
 }
 
+// MARK: - Subviews
+
+public struct WhatsAppToastContentView: View {
+    let payload: HUDPayload
+    @State private var replyText: String = ""
+    @FocusState private var isFieldFocused: Bool
+    
+    public init(payload: HUDPayload) {
+        self.payload = payload
+    }
+    
+    public var body: some View {
+        VStack(spacing: 8) {
+            // Top: Contact Avatar with App Badge + Name + "now" + Message Preview
+            Button(action: {
+                WhatsAppNotificationService.shared.openWhatsApp()
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+                    IslandState.shared.activeHUD = nil
+                }
+            }) {
+                HStack(alignment: .top, spacing: 12) {
+                    ContactAvatarView(
+                        name: payload.title,
+                        imagePath: payload.avatarImagePath,
+                        size: 38,
+                        appBadge: "whatsapp"
+                    )
+                    
+                    VStack(alignment: .leading, spacing: 2.5) {
+                        HStack {
+                            Text(payload.title)
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(.white)
+                                .lineLimit(1)
+                            
+                            Spacer()
+                            
+                            Text(payload.timestampText ?? "now")
+                                .font(.system(size: 11.5, weight: .medium))
+                                .foregroundColor(.white.opacity(0.45))
+                        }
+                        
+                        Text(payload.subtitle ?? "Pesan baru")
+                            .font(.system(size: 12, weight: .regular))
+                            .foregroundColor(.white.opacity(0.85))
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                    }
+                }
+            }
+            .buttonStyle(PlainButtonStyle())
+            
+            // Bottom: Inline Quick Reply Capsule (Screenshot 5)
+            HStack(spacing: 8) {
+                TextField("WhatsApp", text: $replyText, onCommit: {
+                    sendReply()
+                })
+                .focused($isFieldFocused)
+                .textFieldStyle(PlainTextFieldStyle())
+                .font(.system(size: 12.5, weight: .regular))
+                .foregroundColor(.white)
+                .padding(.leading, 12)
+                .padding(.vertical, 6)
+                
+                if replyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Image(systemName: "face.smiling")
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundColor(.white.opacity(0.45))
+                        .padding(.trailing, 12)
+                } else {
+                    Button(action: {
+                        sendReply()
+                    }) {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 17, weight: .bold))
+                            .foregroundColor(Color(red: 0.15, green: 0.83, blue: 0.40))
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .padding(.trailing, 8)
+                }
+            }
+            .frame(height: 32)
+            .background(Color.white.opacity(0.08))
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(isFieldFocused ? Color(red: 0.15, green: 0.83, blue: 0.40).opacity(0.6) : Color.white.opacity(0.12), lineWidth: 0.8)
+            )
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+    }
+    
+    private func sendReply() {
+        let text = replyText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        WhatsAppNotificationService.shared.sendQuickReply(text: text)
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+            IslandState.shared.activeHUD = nil
+        }
+    }
+}
+
 public struct IncomingCallToastContentView: View {
     let payload: HUDPayload
-    @State private var isRingingAnim: Bool = false
     
     public init(payload: HUDPayload) {
         self.payload = payload
@@ -353,74 +391,32 @@ public struct IncomingCallToastContentView: View {
     
     public var body: some View {
         HStack(spacing: 12) {
-            // Left: Glowing Animated Call Icon
-            ZStack {
-                // Pulsing outer halo ring
-                Circle()
-                    .stroke(Color(red: 0.18, green: 0.86, blue: 0.44).opacity(isRingingAnim ? 0.40 : 0.08), lineWidth: 2)
-                    .frame(width: 44, height: 44)
-                    .scaleEffect(isRingingAnim ? 1.08 : 0.94)
-                
-                // Icon background circle
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color(red: 0.18, green: 0.86, blue: 0.44),
-                                Color(red: 0.08, green: 0.68, blue: 0.32)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 36, height: 36)
-                    .shadow(color: Color(red: 0.18, green: 0.86, blue: 0.44).opacity(0.45), radius: 6)
-                
-                Image(systemName: payload.iconName)
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(.white)
-                    .rotationEffect(.degrees(isRingingAnim ? -8 : 8))
-            }
+            // Left: Circular Contact Avatar (Screenshot 1)
+            ContactAvatarView(
+                name: payload.title,
+                imagePath: payload.avatarImagePath,
+                size: 44,
+                appBadge: nil
+            )
             .padding(.leading, 14)
-            .onAppear {
-                withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
-                    isRingingAnim = true
-                }
-            }
             
-            // Middle: Caller Name & Subtitle
+            // Middle: "from iPhone" / "WhatsApp Audio" Subtitle + Bold Caller Name
             VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(payload.title)
-                        .font(.system(size: 14.5, weight: .bold))
-                        .foregroundColor(.white)
-                        .lineLimit(1)
-                    
-                    Text("WhatsApp")
-                        .font(.system(size: 8.5, weight: .bold))
-                        .foregroundColor(Color(red: 0.15, green: 0.83, blue: 0.40))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1.5)
-                        .background(Color(red: 0.15, green: 0.83, blue: 0.40).opacity(0.18))
-                        .clipShape(Capsule())
-                }
+                Text(payload.subtitle ?? "from iPhone")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.white.opacity(0.65))
+                    .lineLimit(1)
                 
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(Color(red: 0.18, green: 0.86, blue: 0.44))
-                        .frame(width: 5, height: 5)
-                    
-                    Text(payload.subtitle ?? "Panggilan Masuk...")
-                        .font(.system(size: 11, weight: .regular))
-                        .foregroundColor(.white.opacity(0.72))
-                        .lineLimit(1)
-                }
+                Text(payload.title)
+                    .font(.system(size: 15.5, weight: .bold))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
             }
             
             Spacer(minLength: 8)
             
-            // Right: Dual Interactive Buttons (Decline & Answer)
-            HStack(spacing: 10) {
+            // Right: Dual Interactive Buttons (Decline 🔴 & Answer 🟢)
+            HStack(spacing: 12) {
                 // Red Decline Button
                 Button(action: {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
@@ -430,37 +426,40 @@ public struct IncomingCallToastContentView: View {
                     ZStack {
                         Circle()
                             .fill(Color(red: 0.95, green: 0.26, blue: 0.24))
-                            .frame(width: 36, height: 36)
+                            .frame(width: 38, height: 38)
                             .shadow(color: Color(red: 0.95, green: 0.26, blue: 0.24).opacity(0.35), radius: 4)
                         
                         Image(systemName: "phone.down.fill")
-                            .font(.system(size: 14, weight: .bold))
+                            .font(.system(size: 15, weight: .bold))
                             .foregroundColor(.white)
                     }
                 }
                 .buttonStyle(PlainButtonStyle())
                 .help("Tolak Panggilan")
                 
-                // Green Answer Button
+                // Green Answer Button -> Transitions to Active Call Live Activity!
                 Button(action: {
                     WhatsAppNotificationService.shared.openWhatsApp()
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                        IslandState.shared.activeHUD = nil
-                    }
+                    IslandState.shared.startActiveCall(
+                        caller: payload.title,
+                        source: payload.subtitle ?? "from iPhone",
+                        isVideo: payload.iconName == "video.fill",
+                        avatarImagePath: payload.avatarImagePath
+                    )
                 }) {
                     ZStack {
                         Circle()
                             .fill(Color(red: 0.18, green: 0.86, blue: 0.44))
-                            .frame(width: 36, height: 36)
+                            .frame(width: 38, height: 38)
                             .shadow(color: Color(red: 0.18, green: 0.86, blue: 0.44).opacity(0.4), radius: 4)
                         
                         Image(systemName: payload.iconName == "video.fill" ? "video.fill" : "phone.fill")
-                            .font(.system(size: 14, weight: .bold))
+                            .font(.system(size: 15, weight: .bold))
                             .foregroundColor(.white)
                     }
                 }
                 .buttonStyle(PlainButtonStyle())
-                .help("Jawab di WhatsApp")
+                .help("Jawab Panggilan")
             }
             .padding(.trailing, 14)
         }

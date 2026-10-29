@@ -14,7 +14,7 @@ public struct NotchRootView: View {
     }
     
     private var isMicroLip: Bool {
-        state.isHoverPeekMode && !state.isPeeking && !state.isExpanded && state.activeHUD == nil && !isHiddenOrFullScreen
+        state.isHoverPeekMode && !state.isPeeking && !state.isExpanded && state.activeHUD == nil && state.activeCall == nil && !isHiddenOrFullScreen
     }
     
     private var currentWidth: CGFloat {
@@ -28,11 +28,14 @@ public struct NotchRootView: View {
             } else if hud.type == .bluetooth {
                 return 360
             } else if hud.type == .whatsapp {
-                return 390
+                return 420
             } else if hud.type == .incomingCall {
                 return 420
             }
             return 280
+        }
+        if state.activeCall != nil {
+            return max(state.notchWidth + 40, 240)
         }
         if state.isHoverPeekMode {
             return state.isPeeking ? state.notchWidth : 180
@@ -49,11 +52,14 @@ public struct NotchRootView: View {
             } else if hud.type == .bluetooth {
                 return 48
             } else if hud.type == .whatsapp {
-                return 54
+                return 96
             } else if hud.type == .incomingCall {
-                return 62
+                return 66
             }
             return 46
+        }
+        if state.activeCall != nil {
+            return state.notchHeight
         }
         if state.isHoverPeekMode {
             return state.isPeeking ? state.notchHeight : 4
@@ -69,9 +75,9 @@ public struct NotchRootView: View {
             } else if hud.type == .bluetooth {
                 return 21
             } else if hud.type == .whatsapp {
-                return 23
+                return 24
             } else if hud.type == .incomingCall {
-                return 26
+                return 24
             }
             return 20
         }
@@ -88,7 +94,7 @@ public struct NotchRootView: View {
             } else if hud.type == .bluetooth {
                 return 7.5
             } else if hud.type == .whatsapp {
-                return 8.5
+                return 9
             } else if hud.type == .incomingCall {
                 return 9
             }
@@ -174,6 +180,7 @@ public struct NotchRootView: View {
                 .animation(.spring(response: 0.36, dampingFraction: 0.78), value: lyrics.isLyricsExpanded)
                 .animation(.spring(response: 0.35, dampingFraction: 0.78), value: state.isPeeking)
                 .animation(.spring(response: 0.38, dampingFraction: 0.72), value: state.activeHUD)
+                .animation(.spring(response: 0.35, dampingFraction: 0.78), value: state.activeCall)
                 .animation(.spring(response: 0.35, dampingFraction: 0.78), value: state.shouldHideForFullScreen)
             }
             

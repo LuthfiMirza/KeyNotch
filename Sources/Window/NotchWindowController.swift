@@ -267,15 +267,18 @@ public final class NotchWindowController: NSObject {
                 width = 360
                 height = 48
             } else if hud.type == .whatsapp {
-                width = 390
-                height = 54
+                width = 420
+                height = 96
             } else if hud.type == .incomingCall {
                 width = 420
-                height = 62
+                height = 66
             } else {
                 width = 280
                 height = 46
             }
+        } else if state.activeCall != nil {
+            width = max(state.notchWidth + 40, 240)
+            height = state.notchHeight
         } else if state.isHoverPeekMode {
             if state.isPeeking {
                 width = state.notchWidth

@@ -97,6 +97,19 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         ) { _ in
             WhatsAppNotificationService.shared.simulateIncomingCall()
         }
+        
+        DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("com.keynotch.triggerActiveCall"),
+            object: nil,
+            queue: .main
+        ) { _ in
+            IslandState.shared.startActiveCall(
+                caller: "Wesley Tingey",
+                source: "from iPhone",
+                isVideo: false,
+                avatarImagePath: WhatsAppNotificationService.shared.findAnyAvatar()
+            )
+        }
     }
     
     // MARK: - Menu Bar Setup
@@ -281,7 +294,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         menu.addItem(waItem)
         
         let testWAItem = NSMenuItem(
-            title: "💬 Test WhatsApp Island HUD",
+            title: "💬 Test WhatsApp Quick Reply (DynaCall)",
             action: #selector(testWhatsAppHUD),
             keyEquivalent: ""
         )
@@ -289,12 +302,20 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         menu.addItem(testWAItem)
         
         let testCallItem = NSMenuItem(
-            title: "📞 Test Incoming Call HUD",
+            title: "📞 Test Incoming Call (Wesley Tingey)",
             action: #selector(testIncomingCallHUD),
             keyEquivalent: ""
         )
         testCallItem.target = self
         menu.addItem(testCallItem)
+        
+        let testActiveCallItem = NSMenuItem(
+            title: "🟢 Test Active Call Timer & Waveform",
+            action: #selector(testActiveCall),
+            keyEquivalent: ""
+        )
+        testActiveCallItem.target = self
+        menu.addItem(testActiveCallItem)
         
         menu.addItem(NSMenuItem.separator())
         
@@ -379,7 +400,16 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
     }
     
     @objc private func testIncomingCallHUD() {
-        WhatsAppNotificationService.shared.simulateIncomingCall(caller: "Eca 🥰", isVideo: false)
+        WhatsAppNotificationService.shared.simulateIncomingCall(caller: "Wesley Tingey", isVideo: false, source: "from iPhone")
+    }
+    
+    @objc private func testActiveCall() {
+        IslandState.shared.startActiveCall(
+            caller: "Wesley Tingey",
+            source: "from iPhone",
+            isVideo: false,
+            avatarImagePath: WhatsAppNotificationService.shared.findAnyAvatar()
+        )
     }
     
     @objc private func pickScreenColor() {

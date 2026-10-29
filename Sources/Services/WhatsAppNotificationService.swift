@@ -239,7 +239,8 @@ public final class WhatsAppNotificationService: ObservableObject {
             m.Z_PK,
             COALESCE(s.ZPARTNERNAME, 'WhatsApp'),
             COALESCE(m.ZTEXT, ''),
-            m.ZMESSAGETYPE
+            m.ZMESSAGETYPE,
+            COALESCE(s.ZCONTACTJID, '')
         FROM ZWAMESSAGE m
         LEFT JOIN ZWACHATSESSION s ON m.ZCHATSESSION = s.Z_PK
         WHERE m.ZISFROMME = 0 AND m.Z_PK > ?
@@ -260,16 +261,18 @@ public final class WhatsAppNotificationService: ObservableObject {
             let rawSender = String(cString: sqlite3_column_text(stmt, 1))
             let rawText = String(cString: sqlite3_column_text(stmt, 2))
             let msgType = sqlite3_column_int(stmt, 3)
+            let rawJID = String(cString: sqlite3_column_text(stmt, 4))
             
             // Advance baseline
             self.lastSeenPK = pk
             
             let displayBody = self.formatMessageBody(text: rawText, type: msgType)
             let msg = WhatsAppMessage(id: pk, sender: rawSender, text: displayBody)
+            let avatarPath = self.resolveAvatarPath(rawJID: rawJID)
             
             DispatchQueue.main.async {
                 self.lastMessage = msg
-                self.presentNotification(sender: rawSender, body: displayBody)
+                self.presentNotification(sender: rawSender, body: displayBody, avatarPath: avatarPath)
             }
         }
     }
@@ -292,7 +295,7 @@ public final class WhatsAppNotificationService: ObservableObject {
     
     // MARK: - Dynamic Island Notification Presentation
     
-    private func presentNotification(sender: String, body: String) {
+    private func presentNotification(sender: String, body: String, avatarPath: String? = nil) {
         let subtitleText = hideMessagePreview ? "Pesan WhatsApp Baru" : body
         
         IslandState.shared.triggerHUD(
@@ -302,9 +305,11 @@ public final class WhatsAppNotificationService: ObservableObject {
                 subtitle: subtitleText,
                 iconName: "message.fill",
                 rightDetail: "WhatsApp",
-                isSuccess: true
+                isSuccess: true,
+                avatarImagePath: avatarPath,
+                timestampText: "now"
             ),
-            duration: 4.5
+            duration: 6.0
         )
     }
     
@@ -322,10 +327,34 @@ public final class WhatsAppNotificationService: ObservableObject {
         }
     }
     
-    public func simulateIncomingMessage(sender: String = "Budi Santoso", text: String = "Halo bro, meeting jam 2 siang di cafe ya! ☕️") {
+    public func sendQuickReply(text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(trimmed, forType: .string)
+        openWhatsApp()
+    }
+    
+    public func findAnyAvatar() -> String? {
+        let profileDir = sharedContainerURL.appendingPathComponent("Media/Profile")
+        guard let files = try? FileManager.default.contentsOfDirectory(atPath: profileDir.path) else { return nil }
+        for file in files {
+            if file.hasSuffix(".jpg") || file.hasSuffix(".thumb") {
+                return profileDir.appendingPathComponent(file).path
+            }
+        }
+        return nil
+    }
+    
+    public func simulateIncomingMessage(
+        sender: String = "Liam Patterson",
+        text: String = "Hey, are we still on for coffee later? I might be 10–15 minutes late, traffic looks bad"
+    ) {
         let msg = WhatsAppMessage(id: Int64(Date().timeIntervalSince1970), sender: sender, text: text)
         self.lastMessage = msg
-        presentNotification(sender: sender, body: text)
+        presentNotification(sender: sender, body: text, avatarPath: findAnyAvatar())
     }
     
     // MARK: - Incoming Call Detection & Presentation
@@ -372,11 +401,49 @@ public final class WhatsAppNotificationService: ObservableObject {
             self.lastSeenCallPK = pk
             
             let callerName = resolveCallerName(rawJID: rawJID)
+            let avatarPath = resolveAvatarPath(rawJID: rawJID)
             
             DispatchQueue.main.async {
-                self.presentCallNotification(caller: callerName, isVideo: isVideo)
+                self.presentCallNotification(caller: callerName, isVideo: isVideo, source: "from iPhone", avatarPath: avatarPath)
             }
         }
+    }
+    
+    public func resolveAvatarPath(rawJID: String) -> String? {
+        let trimmed = rawJID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let cleanJID = trimmed.components(separatedBy: "@").first ?? trimmed
+        
+        var chatDB: OpaquePointer?
+        let uri = "file:\(dbURL.path)?mode=ro"
+        guard sqlite3_open_v2(uri, &chatDB, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI | SQLITE_OPEN_NOMUTEX, nil) == SQLITE_OK else {
+            return nil
+        }
+        defer { sqlite3_close(chatDB) }
+        
+        let query = "SELECT ZPATH FROM ZWAPROFILEPICTUREITEM WHERE ZJID LIKE '%' || ? || '%' AND ZPATH IS NOT NULL ORDER BY Z_PK DESC LIMIT 1;"
+        var stmt: OpaquePointer?
+        if sqlite3_prepare_v2(chatDB, query, -1, &stmt, nil) == SQLITE_OK {
+            sqlite3_bind_text(stmt, 1, (cleanJID as NSString).utf8String, -1, nil)
+            if sqlite3_step(stmt) == SQLITE_ROW {
+                if let text = sqlite3_column_text(stmt, 0) {
+                    let relPath = String(cString: text)
+                    sqlite3_finalize(stmt)
+                    
+                    let fullJpg = sharedContainerURL.appendingPathComponent("\(relPath).jpg").path
+                    if FileManager.default.fileExists(atPath: fullJpg) {
+                        return fullJpg
+                    }
+                    let fullThumb = sharedContainerURL.appendingPathComponent("\(relPath).thumb").path
+                    if FileManager.default.fileExists(atPath: fullThumb) {
+                        return fullThumb
+                    }
+                    return nil
+                }
+            }
+            sqlite3_finalize(stmt)
+        }
+        return nil
     }
     
     private func resolveCallerName(rawJID: String) -> String {
@@ -414,25 +481,26 @@ public final class WhatsAppNotificationService: ObservableObject {
         return cleanJID.isEmpty ? "Panggilan WhatsApp" : cleanJID
     }
     
-    public func presentCallNotification(caller: String, isVideo: Bool) {
-        let subtitle = isVideo ? "Panggilan Video Masuk..." : "Panggilan Suara Masuk..."
-        let icon = isVideo ? "video.fill" : "phone.arrow.down.left.fill"
-        let detail = isVideo ? "Video Call" : "Voice Call"
+    public func presentCallNotification(caller: String, isVideo: Bool, source: String = "from iPhone", avatarPath: String? = nil) {
+        let callSource = isVideo ? "WhatsApp Video" : source
+        let icon = isVideo ? "video.fill" : "phone.fill"
         
         IslandState.shared.triggerHUD(
             HUDPayload(
                 type: .incomingCall,
                 title: caller,
-                subtitle: subtitle,
+                subtitle: callSource,
                 iconName: icon,
-                rightDetail: detail,
-                isSuccess: true
+                rightDetail: "WhatsApp",
+                isSuccess: true,
+                avatarImagePath: avatarPath,
+                timestampText: "now"
             ),
             duration: 15.0 // Ringing lasts 15s or until Answer/Decline
         )
     }
     
-    public func simulateIncomingCall(caller: String = "Eca 🥰", isVideo: Bool = false) {
-        presentCallNotification(caller: caller, isVideo: isVideo)
+    public func simulateIncomingCall(caller: String = "Wesley Tingey", isVideo: Bool = false, source: String = "from iPhone") {
+        presentCallNotification(caller: caller, isVideo: isVideo, source: source, avatarPath: findAnyAvatar())
     }
 }

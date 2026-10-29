@@ -32,6 +32,31 @@ public enum HUDType {
     case incomingCall
 }
 
+public struct ActiveCallState: Equatable {
+    public let callerName: String
+    public let callSource: String // e.g. "from iPhone", "WhatsApp Audio", "FaceTime"
+    public let startDate: Date
+    public let isVideo: Bool
+    public var isMuted: Bool
+    public let avatarImagePath: String?
+    
+    public init(
+        callerName: String,
+        callSource: String = "WhatsApp Audio",
+        startDate: Date = Date(),
+        isVideo: Bool = false,
+        isMuted: Bool = false,
+        avatarImagePath: String? = nil
+    ) {
+        self.callerName = callerName
+        self.callSource = callSource
+        self.startDate = startDate
+        self.isVideo = isVideo
+        self.isMuted = isMuted
+        self.avatarImagePath = avatarImagePath
+    }
+}
+
 public struct HUDPayload: Identifiable, Equatable {
     public let id: UUID = UUID()
     public let type: HUDType
@@ -42,6 +67,8 @@ public struct HUDPayload: Identifiable, Equatable {
     public let rightDetail: String?
     public let customBadgeIcon: String?
     public let isSuccess: Bool
+    public let avatarImagePath: String?
+    public let timestampText: String?
     
     public init(
         type: HUDType,
@@ -51,7 +78,9 @@ public struct HUDPayload: Identifiable, Equatable {
         value: Float? = nil,
         rightDetail: String? = nil,
         customBadgeIcon: String? = nil,
-        isSuccess: Bool = true
+        isSuccess: Bool = true,
+        avatarImagePath: String? = nil,
+        timestampText: String? = nil
     ) {
         self.type = type
         self.title = title
@@ -61,6 +90,8 @@ public struct HUDPayload: Identifiable, Equatable {
         self.rightDetail = rightDetail
         self.customBadgeIcon = customBadgeIcon
         self.isSuccess = isSuccess
+        self.avatarImagePath = avatarImagePath
+        self.timestampText = timestampText
     }
     
     public static func == (lhs: HUDPayload, rhs: HUDPayload) -> Bool {
@@ -82,6 +113,7 @@ public final class IslandState: ObservableObject {
     @Published public var isHidden: Bool = false
     @Published public var selectedTab: IslandTab = .controls
     @Published public var activeHUD: HUDPayload? = nil
+    @Published public var activeCall: ActiveCallState? = nil
     
     // Notch Dimensions & Hardware Awareness
     @Published public var hasPhysicalNotch: Bool = false
@@ -247,5 +279,35 @@ public final class IslandState: ObservableObject {
                     self?.activeHUD = nil
                 }
             }
+    }
+    
+    // MARK: - Active Ongoing Call (Compact Notch Live Activity)
+    
+    public func startActiveCall(caller: String, source: String = "from iPhone", isVideo: Bool = false, avatarImagePath: String? = nil) {
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+            self.activeHUD = nil
+            self.activeCall = ActiveCallState(
+                callerName: caller,
+                callSource: source,
+                startDate: Date(),
+                isVideo: isVideo,
+                isMuted: false,
+                avatarImagePath: avatarImagePath
+            )
+        }
+    }
+    
+    public func endActiveCall() {
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+            self.activeCall = nil
+        }
+    }
+    
+    public func toggleCallMute() {
+        guard var call = activeCall else { return }
+        call.isMuted.toggle()
+        withAnimation(.easeInOut(duration: 0.2)) {
+            self.activeCall = call
+        }
     }
 }

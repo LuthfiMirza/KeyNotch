@@ -15,6 +15,14 @@ public struct CompactNotchView: View {
     
     @State private var currentTime: String = ""
     @State private var clockTimer: AnyCancellable?
+    @State private var callDurationSeconds: Int = 0
+    @State private var callTimer: AnyCancellable?
+    
+    private var callDurationString: String {
+        let minutes = callDurationSeconds / 60
+        let seconds = callDurationSeconds % 60
+        return String(format: "%d:%02d", minutes, seconds)
+    }
     
     // Cached static DateFormatter to eliminate heap allocation on ticks
     private static let timeFormatter: DateFormatter = {
@@ -47,6 +55,92 @@ public struct CompactNotchView: View {
     }
     
     public var body: some View {
+        Group {
+            if state.activeCall != nil {
+                activeCallCompactView
+            } else {
+                normalCompactView
+            }
+        }
+        .frame(height: state.notchHeight)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if state.activeCall != nil {
+                WhatsAppNotificationService.shared.openWhatsApp()
+            } else {
+                state.toggleExpand()
+            }
+        }
+        .onAppear {
+            startMinuteSynchronizedClock()
+            setupCallTimer(for: state.activeCall)
+        }
+        .onDisappear {
+            clockTimer?.cancel()
+            clockTimer = nil
+            callTimer?.cancel()
+            callTimer = nil
+        }
+        .onChange(of: state.activeCall) { newCall in
+            setupCallTimer(for: newCall)
+        }
+    }
+    
+    // MARK: - Active Ongoing Call Compact Notch (Screenshot 2: Mini Avatar + 0:08 + Waveform)
+    
+    private var activeCallCompactView: some View {
+        HStack(spacing: 0) {
+            // Left of Camera Notch: Mini Avatar + Call Duration (Screenshot 2: [Foto] 0:08)
+            HStack(spacing: 6) {
+                ContactAvatarView(
+                    name: state.activeCall?.callerName ?? "Call",
+                    imagePath: state.activeCall?.avatarImagePath,
+                    size: 20,
+                    appBadge: nil
+                )
+                
+                Text(callDurationString)
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                    .monospacedDigit()
+            }
+            .padding(.leading, 12)
+            
+            Spacer(minLength: 16)
+            
+            // Right of Camera Notch: Green Audio Equalizer Waveform bars (Screenshot 2: ||||||||)
+            HStack(spacing: 7) {
+                WaveformView(
+                    isPlaying: true,
+                    color: Color(red: 0.18, green: 0.86, blue: 0.44), // Vibrant Apple Dynamic Island Call Green
+                    barCount: 5,
+                    maxHeight: 14
+                )
+                
+                Button(action: {
+                    state.endActiveCall()
+                }) {
+                    ZStack {
+                        Circle()
+                            .fill(Color(red: 0.95, green: 0.26, blue: 0.24))
+                            .frame(width: 20, height: 20)
+                            .shadow(color: Color(red: 0.95, green: 0.26, blue: 0.24).opacity(0.4), radius: 2)
+                        
+                        Image(systemName: "phone.down.fill")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help("Akhiri Panggilan")
+            }
+            .padding(.trailing, 12)
+        }
+    }
+    
+    // MARK: - Normal Idle Compact View
+    
+    private var normalCompactView: some View {
         HStack(spacing: 0) {
             // MARK: - Left: Privacy Spy Guard (Camera/Mic) OR Download Ring OR Battery/Pomodoro Ring
             HStack {
@@ -221,18 +315,22 @@ public struct CompactNotchView: View {
             .frame(width: (privacy.isCameraInUse || privacy.isMicInUse || transfer.primaryTransfer != nil || calendar.nextMeeting?.isImminent == true || (!media.isPlaying && (market.showTickerInCompactNotch || network.showInCompactNotch))) ? 84 : 48, alignment: .trailing)
             .padding(.trailing, 14)
         }
-        .frame(height: state.notchHeight)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            state.toggleExpand()
+    }
+    
+    private func setupCallTimer(for call: ActiveCallState?) {
+        callTimer?.cancel()
+        guard let call = call else {
+            callDurationSeconds = 0
+            return
         }
-        .onAppear {
-            startMinuteSynchronizedClock()
-        }
-        .onDisappear {
-            clockTimer?.cancel()
-            clockTimer = nil
-        }
+        let elapsed = Int(Date().timeIntervalSince(call.startDate))
+        callDurationSeconds = max(0, elapsed)
+        callTimer = Timer.publish(every: 1.0, on: .main, in: .common)
+            .autoconnect()
+            .sink { _ in
+                let current = Int(Date().timeIntervalSince(call.startDate))
+                self.callDurationSeconds = max(0, current)
+            }
     }
     
     /// Synchronizes clock ticks to minute boundaries, reducing wakeups from 60x/min to 1x/min
