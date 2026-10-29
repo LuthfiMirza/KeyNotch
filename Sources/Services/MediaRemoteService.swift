@@ -453,7 +453,7 @@ public final class MediaRemoteService: ObservableObject {
     
     public static func extractVibrantColor(from image: NSImage) -> Color {
         guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-            return Color(red: 0.78, green: 0.18, blue: 0.28) // Warm crimson fallback
+            return Color(red: 0.35, green: 0.12, blue: 0.12) // Warm crimson fallback
         }
         let size = 16
         var pixels = [UInt8](repeating: 0, count: size * size * 4)
@@ -468,11 +468,11 @@ public final class MediaRemoteService: ObservableObject {
             space: colorSpace,
             bitmapInfo: bitmapInfo.rawValue
         ) else {
-            return Color(red: 0.78, green: 0.18, blue: 0.28)
+            return Color(red: 0.35, green: 0.12, blue: 0.12)
         }
         context.draw(cgImage, in: CGRect(x: 0, y: 0, width: size, height: size))
         
-        var bestR: CGFloat = 0.78, bestG: CGFloat = 0.18, bestB: CGFloat = 0.28
+        var bestR: CGFloat = 0.35, bestG: CGFloat = 0.12, bestB: CGFloat = 0.12
         var maxScore: CGFloat = -1
         var totalSat: CGFloat = 0
         var validPixelCount: CGFloat = 0
@@ -507,13 +507,13 @@ public final class MediaRemoteService: ObservableObject {
         
         // If image is near-monochrome / grayscale (like Drake's album or black & white covers)
         if avgSat < 0.14 || s < 0.14 {
-            return Color(red: 0.78, green: 0.18, blue: 0.28) // Signature warm crimson ambient glow
+            return Color(red: 0.35, green: 0.12, blue: 0.12) // Signature deep warm burgundy/crimson glow matching screenshot
         }
         
-        // Boost saturation and brightness so ambient light is ALWAYS vibrant, warm, and rich
-        let boostedS = max(0.68, min(0.96, s * 1.6))
-        let boostedBr = max(0.65, min(0.85, br * 2.2))
-        let finalColor = NSColor(hue: h, saturation: boostedS, brightness: boostedBr, alpha: 1.0)
+        // Deep, luxurious ambient tones matching reference screenshot (never neon)
+        let ambientS = max(0.55, min(0.80, s * 1.3))
+        let ambientBr = max(0.28, min(0.40, br * 1.3))
+        let finalColor = NSColor(hue: h, saturation: ambientS, brightness: ambientBr, alpha: 1.0)
         return Color(finalColor)
     }
     
