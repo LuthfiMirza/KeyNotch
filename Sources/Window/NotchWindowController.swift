@@ -11,6 +11,14 @@ public final class NotchWindowController: NSObject {
     private var localMouseMonitor: Any?
     private var globalClickMonitor: Any?
     private var localClickMonitor: Any?
+    private var globalScrollMonitor: Any?
+    private var localScrollMonitor: Any?
+    private var localKeyMonitor: Any?
+    
+    // Trackpad Horizontal Discrete Snapping Buffer
+    private var accumulatedScrollDeltaX: CGFloat = 0
+    private var isScrollPagingLocked: Bool = false
+    private var scrollLockResetTimer: Timer?
     
     // Maximum canvas bounds for the NSPanel so animations have space without window resizing
     private let maxPanelWidth: CGFloat = 740
@@ -149,6 +157,91 @@ public final class NotchWindowController: NSObject {
         ) { [weak self] event in
             self?.handleOutsideClick(NSEvent.mouseLocation)
             return event
+        }
+        
+        // Monitor global scroll wheel for 2-finger horizontal trackpad swipe
+        globalScrollMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.scrollWheel]
+        ) { [weak self] event in
+            self?.handleTrackpadScroll(event)
+        }
+        
+        // Monitor local scroll wheel
+        localScrollMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.scrollWheel]
+        ) { [weak self] event in
+            self?.handleTrackpadScroll(event)
+            return event
+        }
+        
+        // Monitor keyboard Left/Right Arrow keys when expanded
+        localKeyMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.keyDown]
+        ) { event in
+            guard IslandState.shared.isExpanded else { return event }
+            // Let Notes tab handle its own typing / cursor movements
+            if IslandState.shared.selectedTab == .notes {
+                return event
+            }
+            if event.keyCode == 123 { // Left Arrow
+                IslandState.shared.selectPreviousTab()
+                return nil
+            } else if event.keyCode == 124 { // Right Arrow
+                IslandState.shared.selectNextTab()
+                return nil
+            }
+            return event
+        }
+    }
+    
+    // MARK: - Trackpad 2-Finger Horizontal Swipe (Per-Dot Discrete Paging)
+    
+    private func handleTrackpadScroll(_ event: NSEvent) {
+        guard IslandState.shared.isExpanded else { return }
+        
+        let mouseLocation = NSEvent.mouseLocation
+        guard activeNotchScreenRect().contains(mouseLocation) else { return }
+        
+        // Extract horizontal & vertical deltas
+        let dx = event.hasPreciseScrollingDeltas ? event.scrollingDeltaX : (event.deltaX * 12)
+        let dy = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY : (event.deltaY * 12)
+        
+        // If user is scrolling vertically inside a list (Clipboard history or Reminders), do not switch tabs
+        if abs(dy) > abs(dx) * 1.3 && abs(dy) > 3 {
+            return
+        }
+        
+        // Gesture ended or cancelled -> unlock immediately
+        if event.phase == .ended || event.phase == .cancelled {
+            accumulatedScrollDeltaX = 0
+            isScrollPagingLocked = false
+            scrollLockResetTimer?.invalidate()
+            return
+        }
+        
+        guard !isScrollPagingLocked else { return }
+        
+        accumulatedScrollDeltaX += dx
+        let threshold: CGFloat = 16.0
+        
+        if accumulatedScrollDeltaX < -threshold {
+            // Swiped left with 2 fingers -> Advance to next dot/tab
+            IslandState.shared.selectNextTab()
+            lockScrollPaging()
+        } else if accumulatedScrollDeltaX > threshold {
+            // Swiped right with 2 fingers -> Move back to previous dot/tab
+            IslandState.shared.selectPreviousTab()
+            lockScrollPaging()
+        }
+    }
+    
+    private func lockScrollPaging() {
+        isScrollPagingLocked = true
+        accumulatedScrollDeltaX = 0
+        scrollLockResetTimer?.invalidate()
+        // Lock for 0.35s to guarantee exactly 1-dot movement per swipe
+        scrollLockResetTimer = Timer.scheduledTimer(withTimeInterval: 0.35, repeats: false) { [weak self] _ in
+            self?.isScrollPagingLocked = false
         }
     }
     
