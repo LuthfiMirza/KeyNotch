@@ -240,7 +240,9 @@ public final class WhatsAppNotificationService: ObservableObject {
             COALESCE(s.ZPARTNERNAME, 'WhatsApp'),
             COALESCE(m.ZTEXT, ''),
             m.ZMESSAGETYPE,
-            COALESCE(s.ZCONTACTJID, '')
+            COALESCE(s.ZCONTACTJID, ''),
+            COALESCE(m.ZGROUPEVENTTYPE, 0),
+            COALESCE(m.ZSTANZAID, '')
         FROM ZWAMESSAGE m
         LEFT JOIN ZWACHATSESSION s ON m.ZCHATSESSION = s.Z_PK
         WHERE m.ZISFROMME = 0 AND m.Z_PK > ?
@@ -262,13 +264,37 @@ public final class WhatsAppNotificationService: ObservableObject {
             let rawText = String(cString: sqlite3_column_text(stmt, 2))
             let msgType = sqlite3_column_int(stmt, 3)
             let rawJID = String(cString: sqlite3_column_text(stmt, 4))
+            let groupEventType = sqlite3_column_int(stmt, 5)
+            let stanzaID: String
+            if let cStr = sqlite3_column_text(stmt, 6) {
+                stanzaID = String(cString: cStr)
+            } else {
+                stanzaID = ""
+            }
             
             // Advance baseline
             self.lastSeenPK = pk
+            let avatarPath = self.resolveAvatarPath(rawJID: rawJID)
             
+            // CRITICAL BUG FIX: Detect Incoming Calls vs Regular Messages
+            // In WhatsApp, incoming calls are recorded with ZMESSAGETYPE = 59 or ZGROUPEVENTTYPE = 5
+            if msgType == 59 || (msgType == 10 && groupEventType == 5) {
+                let isVideo = self.isCallVideo(stanzaID: stanzaID)
+                let caller = (rawSender != "WhatsApp" && !rawSender.isEmpty) ? rawSender : self.resolveCallerName(rawJID: rawJID)
+                DispatchQueue.main.async {
+                    self.presentCallNotification(
+                        caller: caller,
+                        isVideo: isVideo,
+                        source: isVideo ? "WhatsApp Video" : "from iPhone",
+                        avatarPath: avatarPath
+                    )
+                }
+                return
+            }
+            
+            // Regular Chat Message -> Show WhatsApp message toast with Quick Reply
             let displayBody = self.formatMessageBody(text: rawText, type: msgType)
             let msg = WhatsAppMessage(id: pk, sender: rawSender, text: displayBody)
-            let avatarPath = self.resolveAvatarPath(rawJID: rawJID)
             
             DispatchQueue.main.async {
                 self.lastMessage = msg
@@ -375,11 +401,14 @@ public final class WhatsAppNotificationService: ObservableObject {
             a.Z_PK,
             a.ZINCOMING,
             a.ZVIDEO,
-            COALESCE(c.ZGROUPCALLCREATORUSERJIDSTRING, p.ZJIDSTRING, '')
+            COALESCE(c.ZGROUPCALLCREATORUSERJIDSTRING, p.ZJIDSTRING, ''),
+            COALESCE(c.ZOUTCOME, 0),
+            COALESCE(c.ZDURATION, 0.0),
+            COALESCE(a.ZMISSED, 0)
         FROM ZWAAGGREGATECALLEVENT a
         LEFT JOIN ZWACDCALLEVENT c ON c.Z1CALLEVENTS = a.Z_PK
         LEFT JOIN ZWACDCALLEVENTPARTICIPANT p ON p.Z1PARTICIPANTS = c.Z_PK
-        WHERE a.ZINCOMING = 1 AND a.Z_PK > ?
+        WHERE a.Z_PK >= ?
         ORDER BY a.Z_PK DESC
         LIMIT 1;
         """
@@ -394,8 +423,12 @@ public final class WhatsAppNotificationService: ObservableObject {
         
         if sqlite3_step(stmt) == SQLITE_ROW {
             let pk = sqlite3_column_int64(stmt, 0)
+            let isIncoming = sqlite3_column_int(stmt, 1) == 1
             let isVideo = sqlite3_column_int(stmt, 2) == 1
             let rawJID = String(cString: sqlite3_column_text(stmt, 3))
+            let outcome = sqlite3_column_int(stmt, 4)
+            let duration = sqlite3_column_double(stmt, 5)
+            let missed = sqlite3_column_int(stmt, 6) == 1
             
             // Advance call baseline
             self.lastSeenCallPK = pk
@@ -404,9 +437,65 @@ public final class WhatsAppNotificationService: ObservableObject {
             let avatarPath = resolveAvatarPath(rawJID: rawJID)
             
             DispatchQueue.main.async {
-                self.presentCallNotification(caller: callerName, isVideo: isVideo, source: "from iPhone", avatarPath: avatarPath)
+                if isIncoming {
+                    // 1. Call ended, missed, or declined
+                    if outcome == 4 || outcome == 5 || missed {
+                        if IslandState.shared.activeHUD?.type == .incomingCall {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+                                IslandState.shared.activeHUD = nil
+                            }
+                        }
+                    } else if outcome == 1 && duration > 0 {
+                        // 2. Call was answered and connected!
+                        if IslandState.shared.activeCall == nil {
+                            IslandState.shared.startActiveCall(
+                                caller: callerName,
+                                source: isVideo ? "WhatsApp Video" : "WhatsApp Audio",
+                                isVideo: isVideo,
+                                avatarImagePath: avatarPath
+                            )
+                        }
+                    } else {
+                        // 3. Call is currently ringing!
+                        if IslandState.shared.activeHUD?.type != .incomingCall {
+                            self.presentCallNotification(
+                                caller: callerName,
+                                isVideo: isVideo,
+                                source: isVideo ? "WhatsApp Video" : "from iPhone",
+                                avatarPath: avatarPath
+                            )
+                        }
+                    }
+                }
             }
         }
+    }
+    
+    private func isCallVideo(stanzaID: String) -> Bool {
+        guard !stanzaID.isEmpty, FileManager.default.fileExists(atPath: callDBURL.path) else { return false }
+        var db: OpaquePointer?
+        let uri = "file:\(callDBURL.path)?mode=ro"
+        guard sqlite3_open_v2(uri, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI | SQLITE_OPEN_NOMUTEX, nil) == SQLITE_OK else {
+            return false
+        }
+        defer { sqlite3_close(db) }
+        
+        let query = """
+        SELECT a.ZVIDEO FROM ZWAAGGREGATECALLEVENT a
+        LEFT JOIN ZWACDCALLEVENT c ON c.Z1CALLEVENTS = a.Z_PK
+        WHERE c.ZCALLIDSTRING = ? LIMIT 1;
+        """
+        var stmt: OpaquePointer?
+        if sqlite3_prepare_v2(db, query, -1, &stmt, nil) == SQLITE_OK {
+            sqlite3_bind_text(stmt, 1, (stanzaID as NSString).utf8String, -1, nil)
+            if sqlite3_step(stmt) == SQLITE_ROW {
+                let isVid = sqlite3_column_int(stmt, 0) == 1
+                sqlite3_finalize(stmt)
+                return isVid
+            }
+            sqlite3_finalize(stmt)
+        }
+        return false
     }
     
     public func resolveAvatarPath(rawJID: String) -> String? {
@@ -462,6 +551,7 @@ public final class WhatsAppNotificationService: ObservableObject {
         }
         defer { sqlite3_close(chatDB) }
         
+        // 1. Check ZWACHATSESSION
         let query = "SELECT ZPARTNERNAME FROM ZWACHATSESSION WHERE ZCONTACTJID LIKE '%' || ? || '%' LIMIT 1;"
         var stmt: OpaquePointer?
         if sqlite3_prepare_v2(chatDB, query, -1, &stmt, nil) == SQLITE_OK {
@@ -476,6 +566,23 @@ public final class WhatsAppNotificationService: ObservableObject {
                 }
             }
             sqlite3_finalize(stmt)
+        }
+        
+        // 2. Check ZWAPROFILEPUSHNAME for WhatsApp profile push name
+        let pushQuery = "SELECT ZPUSHNAME FROM ZWAPROFILEPUSHNAME WHERE ZJID LIKE '%' || ? || '%' LIMIT 1;"
+        var pushStmt: OpaquePointer?
+        if sqlite3_prepare_v2(chatDB, pushQuery, -1, &pushStmt, nil) == SQLITE_OK {
+            sqlite3_bind_text(pushStmt, 1, (cleanJID as NSString).utf8String, -1, nil)
+            if sqlite3_step(pushStmt) == SQLITE_ROW {
+                if let text = sqlite3_column_text(pushStmt, 0) {
+                    let name = String(cString: text).trimmingCharacters(in: .whitespacesAndNewlines)
+                    sqlite3_finalize(pushStmt)
+                    if !name.isEmpty {
+                        return name
+                    }
+                }
+            }
+            sqlite3_finalize(pushStmt)
         }
         
         return cleanJID.isEmpty ? "Panggilan WhatsApp" : cleanJID
