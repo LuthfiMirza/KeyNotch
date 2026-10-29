@@ -194,6 +194,22 @@ public final class IslandState: ObservableObject {
         }
     }
     
+    public func selectNextTab() {
+        let all = IslandTab.allCases
+        guard let current = all.firstIndex(of: selectedTab), current < all.count - 1 else { return }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+            selectedTab = all[current + 1]
+        }
+    }
+    
+    public func selectPreviousTab() {
+        let all = IslandTab.allCases
+        guard let current = all.firstIndex(of: selectedTab), current > 0 else { return }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+            selectedTab = all[current - 1]
+        }
+    }
+    
     public func triggerHUD(_ payload: HUDPayload, duration: TimeInterval = 1.4) {
         // Only show HUD if not already fully expanded
         guard !isExpanded else { return }
