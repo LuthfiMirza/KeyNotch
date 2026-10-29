@@ -3,6 +3,7 @@ import SwiftUI
 public struct NotchRootView: View {
     @ObservedObject var state = IslandState.shared
     @ObservedObject var lyrics = LyricsService.shared
+    @ObservedObject var media = MediaRemoteService.shared
     @ObservedObject var transfer = DownloadTransferService.shared
     @ObservedObject var shelf = FileShelfService.shared
     @State private var dragOffset: CGFloat = 0
@@ -45,7 +46,9 @@ public struct NotchRootView: View {
     
     private var currentHeight: CGFloat {
         if isHiddenOrFullScreen { return 0 }
-        if state.isExpanded { return 282 }
+        if state.isExpanded {
+            return (state.selectedTab == .music ? 204 : 282)
+        }
         if let hud = state.activeHUD {
             if hud.type == .battery {
                 return 52
@@ -114,6 +117,19 @@ public struct NotchRootView: View {
                     )
                     .fill(Color.black)
                     .overlay(
+                        Group {
+                            if state.isExpanded && state.selectedTab == .music {
+                                ambientLightView
+                            }
+                        }
+                        .clipShape(
+                            NotchShape(
+                                cornerRadius: currentCornerRadius,
+                                topShoulderRadius: currentShoulderRadius
+                            )
+                        )
+                    )
+                    .overlay(
                         NotchShape(
                             cornerRadius: currentCornerRadius,
                             topShoulderRadius: currentShoulderRadius
@@ -144,26 +160,22 @@ public struct NotchRootView: View {
                             }
                         }
                     )
-                        .shadow(
-                            color: Color.black.opacity(state.isExpanded ? 0.5 : 0.25),
-                            radius: state.isExpanded ? 18 : 6,
-                            x: 0,
-                            y: state.isExpanded ? 8 : 2
-                        )
+                    .shadow(
+                        color: Color.black.opacity(state.isExpanded ? 0.5 : 0.25),
+                        radius: state.isExpanded ? 18 : 6,
+                        x: 0,
+                        y: state.isExpanded ? 8 : 2
+                    )
                     
                     // Dynamic Island Content
                     Group {
                         if isMicroLip {
-                            // Empty micro lip for 0-obstruction hover peek mode
                             Color.clear
                         } else if let hud = state.activeHUD {
-                            // Transient HUD Toast View
                             HUDToastView(payload: hud)
                         } else if state.isExpanded {
-                            // Full Expanded State
                             expandedView
                         } else {
-                            // Compact Balanced Notch View
                             CompactNotchView()
                         }
                     }
@@ -224,101 +236,11 @@ public struct NotchRootView: View {
     }
     
     private var expandedView: some View {
-        VStack(spacing: 8) {
-            // MARK: - Minimal Top Header (Tab Title, Badges, Collapse)
-            HStack(spacing: 8) {
-                HStack(spacing: 6) {
-                    Image(systemName: state.selectedTab.iconName)
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(.white.opacity(0.85))
-                    
-                    Text(state.selectedTab.rawValue)
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.white)
-                    
-                    // Badges for Reminders or Active Download
-                    if state.selectedTab == .notes && pendingRemindersCount > 0 {
-                        Text("\(pendingRemindersCount)")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundColor(.yellow)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(Color.yellow.opacity(0.18))
-                            .clipShape(Capsule())
-                    } else if state.selectedTab == .shelf {
-                        if let primary = transfer.primaryTransfer {
-                            Text("\(primary.percentageString)")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundColor(.cyan)
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1)
-                                .background(Color.cyan.opacity(0.18))
-                                .clipShape(Capsule())
-                        } else if !shelf.stagedFiles.isEmpty {
-                            Text("\(shelf.stagedFiles.count) files")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundColor(.cyan)
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1)
-                                .background(Color.cyan.opacity(0.18))
-                                .clipShape(Capsule())
-                        }
-                    }
-                }
-                
-                Spacer()
-                
-                // Subtle Prev/Next Chevrons & Collapse Button
-                HStack(spacing: 6) {
-                    Button(action: {
-                        if currentTabIndex > 0 {
-                            selectTab(at: currentTabIndex - 1)
-                        }
-                    }) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 9.5, weight: .bold))
-                            .foregroundColor(currentTabIndex > 0 ? .white.opacity(0.7) : .white.opacity(0.2))
-                            .frame(width: 22, height: 22)
-                            .background(Color.white.opacity(0.08))
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                    .disabled(currentTabIndex == 0)
-                    
-                    Button(action: {
-                        if currentTabIndex < IslandTab.allCases.count - 1 {
-                            selectTab(at: currentTabIndex + 1)
-                        }
-                    }) {
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 9.5, weight: .bold))
-                            .foregroundColor(currentTabIndex < IslandTab.allCases.count - 1 ? .white.opacity(0.7) : .white.opacity(0.2))
-                            .frame(width: 22, height: 22)
-                            .background(Color.white.opacity(0.08))
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                    .disabled(currentTabIndex == IslandTab.allCases.count - 1)
-                    
-                    // Collapse Button
-                    Button(action: {
-                        state.collapse()
-                    }) {
-                        ZStack {
-                            Circle()
-                                .fill(Color.white.opacity(0.12))
-                                .frame(width: 22, height: 22)
-                            
-                            Image(systemName: "chevron.up")
-                                .font(.system(size: 9.5, weight: .bold))
-                                .foregroundColor(.white.opacity(0.8))
-                        }
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                }
+        VStack(spacing: 0) {
+            // MARK: - Minimal Top Header (Tab Title, Badges, Collapse) - Hidden in Music mode for clean layout
+            if state.selectedTab != .music {
+                topHeaderView
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 9)
             
             // MARK: - Apple In-Notch Directional Slide & Fade (100% Inside Notch)
             ZStack {
@@ -345,7 +267,8 @@ public struct NotchRootView: View {
                         .id(IslandTab.shelf)
                 }
             }
-            .frame(height: 212, alignment: .top)
+            .frame(height: state.selectedTab == .music ? 146 : 212, alignment: .top)
+            .padding(.top, state.selectedTab == .music ? 10 : 0)
             .offset(x: dragOffset * 0.25)
             .gesture(
                 DragGesture(minimumDistance: 15)
@@ -371,34 +294,202 @@ public struct NotchRootView: View {
                     }
             )
             
-            // MARK: - Bottom Dot Page Indicator (Interactive & Centered with Bottom Padding)
-            HStack(spacing: 7) {
-                ForEach(0..<IslandTab.allCases.count, id: \.self) { index in
-                    let isSelected = currentTabIndex == index
-                    Button(action: {
-                        selectTab(at: index)
-                    }) {
-                        ZStack {
-                            if isSelected {
-                                Capsule()
-                                    .fill(Color.white)
-                                    .frame(width: 18, height: 5.5)
-                                    .shadow(color: Color.white.opacity(0.4), radius: 2)
-                            } else {
-                                Circle()
-                                    .fill(Color.white.opacity(0.28))
-                                    .frame(width: 5.5, height: 5.5)
+            // MARK: - Bottom Dot Page Indicator & Settings Gear (Matches User Screenshot)
+            HStack(spacing: 8) {
+                Spacer()
+                
+                HStack(spacing: 7) {
+                    ForEach(0..<IslandTab.allCases.count, id: \.self) { index in
+                        let isSelected = currentTabIndex == index
+                        Button(action: {
+                            selectTab(at: index)
+                        }) {
+                            ZStack {
+                                if isSelected {
+                                    Capsule()
+                                        .fill(Color.white)
+                                        .frame(width: 18, height: 5.5)
+                                        .shadow(color: Color.white.opacity(0.4), radius: 2)
+                                } else {
+                                    Circle()
+                                        .fill(Color.white.opacity(0.28))
+                                        .frame(width: 5.5, height: 5.5)
+                                }
                             }
+                            .contentShape(Rectangle().size(width: 20, height: 16))
                         }
-                        .contentShape(Rectangle().size(width: 22, height: 16))
+                        .buttonStyle(PlainButtonStyle())
+                        .help(IslandTab.allCases[index].rawValue)
                     }
-                    .buttonStyle(PlainButtonStyle())
-                    .help(IslandTab.allCases[index].rawValue)
                 }
+                
+                Spacer()
+                
+                // Gear Settings Button (Screenshot Match!)
+                Button(action: {
+                    AppDelegate.shared?.showMenu()
+                }) {
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.45))
+                        .frame(width: 22, height: 22)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help("KeyNotch Menu / Pengaturan")
+                .padding(.trailing, 16)
             }
             .padding(.top, 4)
             .padding(.bottom, 10)
         }
+    }
+    
+    // MARK: - Top Header View for Non-Music Tabs
+    
+    private var topHeaderView: some View {
+        HStack(spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: state.selectedTab.iconName)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.white.opacity(0.85))
+                
+                Text(state.selectedTab.rawValue)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.white)
+                
+                // Badges for Reminders or Active Download
+                if state.selectedTab == .notes && pendingRemindersCount > 0 {
+                    Text("\(pendingRemindersCount)")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(.yellow)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Color.yellow.opacity(0.18))
+                        .clipShape(Capsule())
+                } else if state.selectedTab == .shelf {
+                    if let primary = transfer.primaryTransfer {
+                        Text("\(primary.percentageString)")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(.cyan)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Color.cyan.opacity(0.18))
+                            .clipShape(Capsule())
+                    } else if !shelf.stagedFiles.isEmpty {
+                        Text("\(shelf.stagedFiles.count) files")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(.cyan)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Color.cyan.opacity(0.18))
+                            .clipShape(Capsule())
+                    }
+                }
+            }
+            
+            Spacer()
+            
+            // Subtle Prev/Next Chevrons & Collapse Button
+            HStack(spacing: 6) {
+                Button(action: {
+                    if currentTabIndex > 0 {
+                        selectTab(at: currentTabIndex - 1)
+                    }
+                }) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 9.5, weight: .bold))
+                        .foregroundColor(currentTabIndex > 0 ? .white.opacity(0.7) : .white.opacity(0.2))
+                        .frame(width: 22, height: 22)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(PlainButtonStyle())
+                .disabled(currentTabIndex == 0)
+                
+                Button(action: {
+                    if currentTabIndex < IslandTab.allCases.count - 1 {
+                        selectTab(at: currentTabIndex + 1)
+                    }
+                }) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9.5, weight: .bold))
+                        .foregroundColor(currentTabIndex < IslandTab.allCases.count - 1 ? .white.opacity(0.7) : .white.opacity(0.2))
+                        .frame(width: 22, height: 22)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(PlainButtonStyle())
+                .disabled(currentTabIndex == IslandTab.allCases.count - 1)
+                
+                // Collapse Button
+                Button(action: {
+                    state.collapse()
+                }) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.12))
+                            .frame(width: 22, height: 22)
+                        
+                        Image(systemName: "chevron.up")
+                            .font(.system(size: 9.5, weight: .bold))
+                            .foregroundColor(.white.opacity(0.8))
+                    }
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 9)
+    }
+    
+    // MARK: - Dynamic Ambient Light Gradient (Screenshot Match!)
+    
+    private var ambientLightView: some View {
+        ZStack {
+            // 1. Bottom-right radial glow (Deep ambient mood from screenshot!)
+            RadialGradient(
+                gradient: Gradient(colors: [
+                    media.ambientColor.opacity(0.42),
+                    media.ambientColor.opacity(0.18),
+                    media.ambientColor.opacity(0.04),
+                    Color.clear
+                ]),
+                center: .bottomTrailing,
+                startRadius: 20,
+                endRadius: 420
+            )
+            
+            // 2. Bottom edge bloom
+            LinearGradient(
+                stops: [
+                    .init(color: Color.clear, location: 0),
+                    .init(color: media.ambientColor.opacity(0.08), location: 0.45),
+                    .init(color: media.ambientColor.opacity(0.26), location: 1.0)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            
+            // 3. Subtle bottom-left warmth
+            LinearGradient(
+                stops: [
+                    .init(color: media.ambientColor.opacity(0.16), location: 0),
+                    .init(color: Color.clear, location: 0.6)
+                ],
+                startPoint: .bottomLeading,
+                endPoint: .topTrailing
+            )
+            
+            // 4. Ultra-soft blurred artwork backlight
+            if let artwork = media.artwork {
+                Image(nsImage: artwork)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .blur(radius: 65)
+                    .opacity(0.18)
+                    .blendMode(.screen)
+            }
+        }
+        .allowsHitTesting(false)
     }
 }
 
@@ -421,4 +512,3 @@ public struct TabPageTransitionModifier: ViewModifier {
             .scaleEffect(scale)
     }
 }
-

@@ -269,7 +269,7 @@ public final class NotchWindowController: NSObject {
         
         if state.isExpanded {
             width = (state.selectedTab == .music && LyricsService.shared.isLyricsExpanded) ? 680 : 540
-            height = 282
+            height = (state.selectedTab == .music ? 204 : 282)
         } else if let hud = state.activeHUD {
             if hud.type == .battery {
                 width = 370

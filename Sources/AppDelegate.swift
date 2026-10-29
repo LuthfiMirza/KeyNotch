@@ -2,9 +2,11 @@ import Cocoa
 import SwiftUI
 
 public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+    public static private(set) var shared: AppDelegate?
     private var statusItem: NSStatusItem!
     
     public func applicationDidFinishLaunching(_ notification: Notification) {
+        Self.shared = self
         // Initialize Core Window Engine
         NotchWindowController.shared.setup()
         
@@ -142,6 +144,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
     public func menuDidClose(_ menu: NSMenu) {
         // Reset menu property so left-clicks continue to trigger statusItemAction
         statusItem.menu = nil
+    }
+    
+    public func showMenu() {
+        guard let button = statusItem.button else { return }
+        let menu = makeContextMenu()
+        menu.delegate = self
+        statusItem.menu = menu
+        button.performClick(nil)
     }
     
     private func makeContextMenu() -> NSMenu {

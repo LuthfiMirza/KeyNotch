@@ -1,5 +1,6 @@
 import Cocoa
 import Combine
+import SwiftUI
 
 public final class MediaRemoteService: ObservableObject {
     public static let shared = MediaRemoteService()
@@ -9,6 +10,7 @@ public final class MediaRemoteService: ObservableObject {
     @Published public var artist: String = ""
     @Published public var album: String = ""
     @Published public var artwork: NSImage? = nil
+    @Published public var ambientColor: Color = Color(red: 0.95, green: 0.22, blue: 0.38)
     @Published public var isPlaying: Bool = false
     @Published public var elapsedTime: Double = 0
     @Published public var duration: Double = 0
@@ -203,6 +205,7 @@ public final class MediaRemoteService: ObservableObject {
                 self.hasActiveMedia = true
                 if let newArtwork = newArtwork {
                     self.artwork = newArtwork
+                    self.updateAmbientColor(from: newArtwork)
                 }
                 
                 if newIsPlaying && self.fallbackTimer == nil {
@@ -433,6 +436,66 @@ public final class MediaRemoteService: ObservableObject {
             var error: NSDictionary?
             NSAppleScript(source: script)?.executeAndReturnError(&error)
         }
+    }
+    
+    // MARK: - Dynamic Ambient Color Extraction
+    
+    public func updateAmbientColor(from image: NSImage) {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let color = Self.extractVibrantColor(from: image)
+            DispatchQueue.main.async {
+                withAnimation(.linear(duration: 0.6)) {
+                    self?.ambientColor = color
+                }
+            }
+        }
+    }
+    
+    public static func extractVibrantColor(from image: NSImage) -> Color {
+        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            return Color(red: 0.95, green: 0.22, blue: 0.38)
+        }
+        let size = 10
+        var pixels = [UInt8](repeating: 0, count: size * size * 4)
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue)
+        guard let context = CGContext(
+            data: &pixels,
+            width: size,
+            height: size,
+            bitsPerComponent: 8,
+            bytesPerRow: size * 4,
+            space: colorSpace,
+            bitmapInfo: bitmapInfo.rawValue
+        ) else {
+            return Color(red: 0.95, green: 0.22, blue: 0.38)
+        }
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: size, height: size))
+        
+        var bestColor = Color(red: 0.95, green: 0.22, blue: 0.38)
+        var maxScore: Double = -1
+        
+        for i in 0..<(size * size) {
+            let r = Double(pixels[i * 4]) / 255.0
+            let g = Double(pixels[i * 4 + 1]) / 255.0
+            let b = Double(pixels[i * 4 + 2]) / 255.0
+            
+            let maxVal = max(r, max(g, b))
+            let minVal = min(r, min(g, b))
+            let delta = maxVal - minVal
+            let sat = maxVal == 0 ? 0 : delta / maxVal
+            let brightness = maxVal
+            
+            // Prefer vibrant, saturated colors over muddy gray or pure black/white
+            if brightness > 0.2 && brightness < 0.95 && sat > 0.25 {
+                let score = sat * 0.7 + brightness * 0.3
+                if score > maxScore {
+                    maxScore = score
+                    bestColor = Color(red: r, green: g, blue: b)
+                }
+            }
+        }
+        return bestColor
     }
     
     deinit {

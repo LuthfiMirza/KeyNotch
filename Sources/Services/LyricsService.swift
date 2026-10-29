@@ -19,7 +19,7 @@ public final class LyricsService: ObservableObject {
     
     @Published public var lyrics: [LyricLine] = []
     @Published public var currentLineIndex: Int = 0
-    @Published public var isLyricsExpanded: Bool = false
+    @Published public var isLyricsExpanded: Bool = true
     @Published public var isLoading: Bool = false
     @Published public var statusMessage: String? = nil
     
