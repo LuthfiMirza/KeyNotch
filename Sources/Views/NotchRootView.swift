@@ -445,48 +445,62 @@ public struct NotchRootView: View {
     
     private var ambientLightView: some View {
         ZStack {
-            // 1. Bottom-right radial glow (Deep ambient mood from screenshot!)
-            RadialGradient(
-                gradient: Gradient(colors: [
-                    media.ambientColor.opacity(0.42),
-                    media.ambientColor.opacity(0.18),
-                    media.ambientColor.opacity(0.04),
-                    Color.clear
-                ]),
-                center: .bottomTrailing,
-                startRadius: 20,
-                endRadius: 420
-            )
-            
-            // 2. Bottom edge bloom
+            // 1. Deep bottom-to-top gradient (top 32% stays pure pitch black for physical camera notch)
             LinearGradient(
                 stops: [
-                    .init(color: Color.clear, location: 0),
-                    .init(color: media.ambientColor.opacity(0.08), location: 0.45),
-                    .init(color: media.ambientColor.opacity(0.26), location: 1.0)
+                    .init(color: Color.clear, location: 0.0),
+                    .init(color: Color.clear, location: 0.30),
+                    .init(color: media.ambientColor.opacity(0.30), location: 0.60),
+                    .init(color: media.ambientColor.opacity(0.65), location: 0.82),
+                    .init(color: media.ambientColor.opacity(0.85), location: 1.0)
                 ],
                 startPoint: .top,
                 endPoint: .bottom
             )
             
-            // 3. Subtle bottom-left warmth
-            LinearGradient(
-                stops: [
-                    .init(color: media.ambientColor.opacity(0.16), location: 0),
-                    .init(color: Color.clear, location: 0.6)
-                ],
-                startPoint: .bottomLeading,
-                endPoint: .topTrailing
+            // 2. Bottom-right radial glow (prominent ambient lighting under lyrics)
+            RadialGradient(
+                gradient: Gradient(colors: [
+                    media.ambientColor.opacity(0.90),
+                    media.ambientColor.opacity(0.50),
+                    media.ambientColor.opacity(0.18),
+                    Color.clear
+                ]),
+                center: .bottomTrailing,
+                startRadius: 20,
+                endRadius: 400
             )
             
-            // 4. Ultra-soft blurred artwork backlight
+            // 3. Bottom-left gentle warmth (under playback controls)
+            RadialGradient(
+                gradient: Gradient(colors: [
+                    media.ambientColor.opacity(0.58),
+                    media.ambientColor.opacity(0.22),
+                    Color.clear
+                ]),
+                center: .bottomLeading,
+                startRadius: 10,
+                endRadius: 280
+            )
+            
+            // 4. Soft blurred artwork texture masked strictly to the bottom half
             if let artwork = media.artwork {
                 Image(nsImage: artwork)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
-                    .blur(radius: 65)
-                    .opacity(0.18)
-                    .blendMode(.screen)
+                    .blur(radius: 45)
+                    .opacity(0.35)
+                    .mask(
+                        LinearGradient(
+                            stops: [
+                                .init(color: .clear, location: 0.0),
+                                .init(color: .clear, location: 0.35),
+                                .init(color: .black, location: 0.85)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
             }
         }
         .allowsHitTesting(false)

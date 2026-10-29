@@ -453,9 +453,9 @@ public final class MediaRemoteService: ObservableObject {
     
     public static func extractVibrantColor(from image: NSImage) -> Color {
         guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-            return Color(red: 0.95, green: 0.22, blue: 0.38)
+            return Color(red: 0.78, green: 0.18, blue: 0.28) // Warm crimson fallback
         }
-        let size = 10
+        let size = 16
         var pixels = [UInt8](repeating: 0, count: size * size * 4)
         let colorSpace = CGColorSpaceCreateDeviceRGB()
         let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue)
@@ -468,34 +468,53 @@ public final class MediaRemoteService: ObservableObject {
             space: colorSpace,
             bitmapInfo: bitmapInfo.rawValue
         ) else {
-            return Color(red: 0.95, green: 0.22, blue: 0.38)
+            return Color(red: 0.78, green: 0.18, blue: 0.28)
         }
         context.draw(cgImage, in: CGRect(x: 0, y: 0, width: size, height: size))
         
-        var bestColor = Color(red: 0.95, green: 0.22, blue: 0.38)
-        var maxScore: Double = -1
+        var bestR: CGFloat = 0.78, bestG: CGFloat = 0.18, bestB: CGFloat = 0.28
+        var maxScore: CGFloat = -1
+        var totalSat: CGFloat = 0
+        var validPixelCount: CGFloat = 0
         
         for i in 0..<(size * size) {
-            let r = Double(pixels[i * 4]) / 255.0
-            let g = Double(pixels[i * 4 + 1]) / 255.0
-            let b = Double(pixels[i * 4 + 2]) / 255.0
+            let r = CGFloat(pixels[i * 4]) / 255.0
+            let g = CGFloat(pixels[i * 4 + 1]) / 255.0
+            let b = CGFloat(pixels[i * 4 + 2]) / 255.0
             
-            let maxVal = max(r, max(g, b))
-            let minVal = min(r, min(g, b))
-            let delta = maxVal - minVal
-            let sat = maxVal == 0 ? 0 : delta / maxVal
-            let brightness = maxVal
+            let nsCol = NSColor(red: r, green: g, blue: b, alpha: 1.0)
+            var h: CGFloat = 0, s: CGFloat = 0, br: CGFloat = 0, a: CGFloat = 0
+            nsCol.getHue(&h, saturation: &s, brightness: &br, alpha: &a)
             
-            // Prefer vibrant, saturated colors over muddy gray or pure black/white
-            if brightness > 0.2 && brightness < 0.95 && sat > 0.25 {
-                let score = sat * 0.7 + brightness * 0.3
+            // Exclude extreme white / extreme pitch black
+            if br > 0.08 && br < 0.98 {
+                totalSat += s
+                validPixelCount += 1
+                
+                // Prioritize chromatic saturation and balanced brightness
+                let score = s * 0.75 + br * 0.25
                 if score > maxScore {
                     maxScore = score
-                    bestColor = Color(red: r, green: g, blue: b)
+                    bestR = r; bestG = g; bestB = b
                 }
             }
         }
-        return bestColor
+        
+        let avgSat = validPixelCount > 0 ? (totalSat / validPixelCount) : 0
+        let bestNSCol = NSColor(red: bestR, green: bestG, blue: bestB, alpha: 1.0)
+        var h: CGFloat = 0, s: CGFloat = 0, br: CGFloat = 0, a: CGFloat = 0
+        bestNSCol.getHue(&h, saturation: &s, brightness: &br, alpha: &a)
+        
+        // If image is near-monochrome / grayscale (like Drake's album or black & white covers)
+        if avgSat < 0.14 || s < 0.14 {
+            return Color(red: 0.78, green: 0.18, blue: 0.28) // Signature warm crimson ambient glow
+        }
+        
+        // Boost saturation and brightness so ambient light is ALWAYS vibrant, warm, and rich
+        let boostedS = max(0.68, min(0.96, s * 1.6))
+        let boostedBr = max(0.65, min(0.85, br * 2.2))
+        let finalColor = NSColor(hue: h, saturation: boostedS, brightness: boostedBr, alpha: 1.0)
+        return Color(finalColor)
     }
     
     deinit {
