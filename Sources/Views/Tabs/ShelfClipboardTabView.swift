@@ -177,13 +177,36 @@ public struct ShelfClipboardTabView: View {
                             .buttonStyle(PlainButtonStyle())
                         }
                     }
-                } else if subTab == 2 && !clipboard.pasteQueue.isEmpty {
-                    Button(action: { clipboard.clearQueue() }) {
-                        Text("Clear Queue")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(.white.opacity(0.5))
+                } else if subTab == 2 {
+                    HStack(spacing: 8) {
+                        Button(action: {
+                            clipboard.toggleAutoQueueMode()
+                        }) {
+                            HStack(spacing: 3) {
+                                Image(systemName: clipboard.autoQueueMode ? "checkmark.circle.fill" : "circle")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundColor(clipboard.autoQueueMode ? .green : .white.opacity(0.4))
+                                Text("Auto-Queue")
+                                    .font(.system(size: 9, weight: .medium))
+                                    .foregroundColor(clipboard.autoQueueMode ? .white : .white.opacity(0.5))
+                            }
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(clipboard.autoQueueMode ? Color.green.opacity(0.18) : Color.white.opacity(0.06))
+                            .clipShape(Capsule())
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .help("When ON, every Cmd+C is automatically added into Sequential Paste Queue")
+                        
+                        if !clipboard.pasteQueue.isEmpty {
+                            Button(action: { clipboard.clearQueue() }) {
+                                Text("Clear Queue")
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundColor(.white.opacity(0.5))
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
                     }
-                    .buttonStyle(PlainButtonStyle())
                 }
             }
             .padding(.horizontal, 14)
@@ -196,6 +219,9 @@ public struct ShelfClipboardTabView: View {
             } else {
                 pasteQueueView
             }
+        }
+        .onAppear {
+            clipboard.checkPasteboard()
         }
     }
     
@@ -472,10 +498,14 @@ public struct ShelfClipboardTabView: View {
                 VStack(spacing: 6) {
                     Image(systemName: "doc.on.clipboard")
                         .font(.system(size: 24))
-                        .foregroundColor(.white.opacity(0.3))
+                        .foregroundColor(.yellow.opacity(0.6))
                     Text("No clipboard snippets yet")
-                        .font(.system(size: 12))
-                        .foregroundColor(.white.opacity(0.5))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.white)
+                    Text("Copy any text in any app (⌘C or right-click).\nKeyNotch automatically records it here!")
+                        .font(.system(size: 10))
+                        .foregroundColor(.white.opacity(0.45))
+                        .multilineTextAlignment(.center)
                 }
                 .frame(height: 125)
             } else {
@@ -570,13 +600,13 @@ public struct ShelfClipboardTabView: View {
                 VStack(spacing: 6) {
                     Image(systemName: "square.stack.3d.down.right")
                         .font(.system(size: 24))
-                        .foregroundColor(.white.opacity(0.3))
+                        .foregroundColor(.green.opacity(0.6))
                     Text("Sequential Paste Queue is empty")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.white.opacity(0.7))
-                    Text("Click '+ Queue' on any snippet. Then press ⌥⇧V anywhere to paste in order.")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.white)
+                    Text("Click '+ Queue' on any snippet or turn on 'Auto-Queue'.\nThen press ⌥⇧V anywhere to paste each item in order.")
                         .font(.system(size: 10))
-                        .foregroundColor(.white.opacity(0.4))
+                        .foregroundColor(.white.opacity(0.45))
                         .multilineTextAlignment(.center)
                 }
                 .padding(12)
