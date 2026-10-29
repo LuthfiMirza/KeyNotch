@@ -291,6 +291,7 @@ public struct NotchRootView: View {
                         .frame(width: width, height: 212, alignment: .top)
                 }
                 .offset(x: -CGFloat(currentTabIndex) * width + dragOffset)
+                .animation(.spring(response: 0.35, dampingFraction: 0.78), value: currentTabIndex)
                 .gesture(
                     DragGesture(minimumDistance: 15)
                         .onChanged { value in
