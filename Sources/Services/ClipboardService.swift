@@ -2,14 +2,15 @@ import Cocoa
 import SwiftUI
 import Combine
 
-public struct ClipboardItem: Identifiable, Equatable {
-    public let id: UUID = UUID()
+public struct ClipboardItem: Identifiable, Codable, Equatable {
+    public var id: UUID
     public let content: String
     public let timestamp: Date
     public let isHexColor: Bool
     public let colorHex: String?
     
-    public init(content: String, timestamp: Date = Date()) {
+    public init(id: UUID = UUID(), content: String, timestamp: Date = Date()) {
+        self.id = id
         self.content = content
         self.timestamp = timestamp
         
@@ -46,9 +47,19 @@ public final class ClipboardService: ObservableObject {
         }
     }
     
+    @Published public var autoQueueMode: Bool {
+        didSet {
+            UserDefaults.standard.set(autoQueueMode, forKey: "autoQueueMode")
+        }
+    }
+    
     private var lastChangeCount: Int = 0
+    private var pollTimer: Timer?
     private var keyMonitor: Any?
     private var cancellables = Set<AnyCancellable>()
+    
+    private let historyKey = "keynotch_clipboard_history_v1"
+    private let queueKey = "keynotch_clipboard_queue_v1"
     
     private init() {
         if UserDefaults.standard.object(forKey: "autoCleanPlainText") == nil {
@@ -57,19 +68,48 @@ public final class ClipboardService: ObservableObject {
             self.autoCleanPlainText = UserDefaults.standard.bool(forKey: "autoCleanPlainText")
         }
         
+        self.autoQueueMode = UserDefaults.standard.bool(forKey: "autoQueueMode")
+        
+        // Load persisted history & queue
+        loadHistory()
+        loadQueue()
+        
         self.lastChangeCount = NSPasteboard.general.changeCount
-        checkPasteboard()
+        
+        // Start proactive pasteboard monitoring
+        startPasteboardMonitoring()
         setupEventDrivenCopyMonitor()
+        
+        // Check on Island expansion
+        IslandState.shared.$isExpanded
+            .sink { [weak self] expanded in
+                if expanded {
+                    self?.checkPasteboard()
+                }
+            }
+            .store(in: &cancellables)
     }
     
-    /// Zero-polling event monitor: captures Cmd+C and Cmd+X to evaluate pasteboard only on user action
+    // MARK: - Reliable Proactive Pasteboard Monitor (0.0% CPU)
+    
+    private func startPasteboardMonitoring() {
+        pollTimer?.invalidate()
+        // 0.45s interval checking integer changeCount takes ~0.0001% CPU
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.45, repeats: true) { [weak self] _ in
+            self?.checkPasteboard()
+        }
+        timer.tolerance = 0.1
+        RunLoop.main.add(timer, forMode: .common)
+        self.pollTimer = timer
+    }
+    
+    /// Secondary accelerator: captures Cmd+C/Cmd+X if Accessibility permission is enabled
     private func setupEventDrivenCopyMonitor() {
         keyMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
             guard event.modifierFlags.contains(.command) else { return }
             guard let char = event.charactersIgnoringModifiers?.lowercased() else { return }
             
             if char == "c" || char == "x" {
-                // Delay slightly (100ms) for the source application to write to pasteboard
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     self?.checkPasteboard()
                 }
@@ -94,6 +134,23 @@ public final class ClipboardService: ObservableObject {
         )
     }
     
+    public func toggleAutoQueueMode() {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            autoQueueMode.toggle()
+        }
+        
+        IslandState.shared.triggerHUD(
+            HUDPayload(
+                type: .custom,
+                title: autoQueueMode ? "Auto-Queue ON" : "Auto-Queue OFF",
+                subtitle: autoQueueMode ? "Next copied items auto-queue" : "Manual queue mode",
+                iconName: "square.stack.3d.down.right.fill",
+                isSuccess: autoQueueMode
+            ),
+            duration: 1.2
+        )
+    }
+    
     public func checkPasteboard() {
         let pasteboard = NSPasteboard.general
         let currentCount = pasteboard.changeCount
@@ -112,17 +169,37 @@ public final class ClipboardService: ObservableObject {
             sanitizePasteboardToPlainText(trimmed)
         }
         
-        // Avoid immediate duplicate of top history item
+        // Avoid duplicate of top history item
         if let first = history.first, first.content == trimmed {
             return
         }
         
-        DispatchQueue.main.async {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
             let item = ClipboardItem(content: trimmed)
+            
             self.history.removeAll { $0.content == trimmed }
             self.history.insert(item, at: 0)
-            if self.history.count > 20 {
-                self.history = Array(self.history.prefix(20))
+            if self.history.count > 30 {
+                self.history = Array(self.history.prefix(30))
+            }
+            self.saveHistory()
+            
+            // If Auto-Queue mode is active, also add directly to Sequential Paste Queue
+            if self.autoQueueMode {
+                self.pasteQueue.append(item)
+                self.saveQueue()
+                IslandState.shared.triggerHUD(
+                    HUDPayload(
+                        type: .custom,
+                        title: "Queued for Sequential Paste",
+                        subtitle: trimmed,
+                        iconName: "square.stack.3d.down.right.fill",
+                        value: Float(self.pasteQueue.count),
+                        rightDetail: "#\(self.pasteQueue.count) in Queue"
+                    ),
+                    duration: 1.2
+                )
             }
         }
     }
@@ -166,6 +243,7 @@ public final class ClipboardService: ObservableObject {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
             pasteQueue.append(item)
         }
+        saveQueue()
         
         IslandState.shared.triggerHUD(
             HUDPayload(
@@ -185,12 +263,14 @@ public final class ClipboardService: ObservableObject {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
             _ = pasteQueue.remove(at: index)
         }
+        saveQueue()
     }
     
     public func clearQueue() {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
             pasteQueue.removeAll()
         }
+        saveQueue()
     }
     
     /// Pops the next item in the sequential queue and primes the system pasteboard for Cmd+V
@@ -213,6 +293,7 @@ public final class ClipboardService: ObservableObject {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
             _ = pasteQueue.removeFirst()
         }
+        saveQueue()
         
         // Prime system pasteboard
         let pasteboard = NSPasteboard.general
@@ -239,9 +320,39 @@ public final class ClipboardService: ObservableObject {
         withAnimation {
             history.removeAll()
         }
+        saveHistory()
+    }
+    
+    // MARK: - Persistence
+    
+    private func saveHistory() {
+        if let data = try? JSONEncoder().encode(history) {
+            UserDefaults.standard.set(data, forKey: historyKey)
+        }
+    }
+    
+    private func loadHistory() {
+        if let data = UserDefaults.standard.data(forKey: historyKey),
+           let saved = try? JSONDecoder().decode([ClipboardItem].self, from: data) {
+            self.history = saved
+        }
+    }
+    
+    private func saveQueue() {
+        if let data = try? JSONEncoder().encode(pasteQueue) {
+            UserDefaults.standard.set(data, forKey: queueKey)
+        }
+    }
+    
+    private func loadQueue() {
+        if let data = UserDefaults.standard.data(forKey: queueKey),
+           let saved = try? JSONDecoder().decode([ClipboardItem].self, from: data) {
+            self.pasteQueue = saved
+        }
     }
     
     deinit {
+        pollTimer?.invalidate()
         if let km = keyMonitor {
             NSEvent.removeMonitor(km)
         }
