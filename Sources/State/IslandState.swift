@@ -194,9 +194,27 @@ public final class IslandState: ObservableObject {
         }
     }
     
+    public enum PageSlideDirection {
+        case forward
+        case backward
+    }
+    
+    @Published public var slideDirection: PageSlideDirection = .forward
+    
+    public func selectTab(at index: Int) {
+        let all = IslandTab.allCases
+        guard index >= 0 && index < all.count else { return }
+        let current = all.firstIndex(of: selectedTab) ?? 0
+        slideDirection = (index >= current) ? .forward : .backward
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+            selectedTab = all[index]
+        }
+    }
+    
     public func selectNextTab() {
         let all = IslandTab.allCases
         guard let current = all.firstIndex(of: selectedTab), current < all.count - 1 else { return }
+        slideDirection = .forward
         withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
             selectedTab = all[current + 1]
         }
@@ -205,6 +223,7 @@ public final class IslandState: ObservableObject {
     public func selectPreviousTab() {
         let all = IslandTab.allCases
         guard let current = all.firstIndex(of: selectedTab), current > 0 else { return }
+        slideDirection = .backward
         withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
             selectedTab = all[current - 1]
         }
