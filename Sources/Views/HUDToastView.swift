@@ -46,7 +46,7 @@ public struct HUDToastView: View {
                 standardToastView
             }
         }
-        .frame(height: payload.type == .battery ? 52 : (payload.type == .bluetooth ? 48 : (payload.type == .whatsapp ? 96 : (payload.type == .incomingCall ? 66 : 46))))
+        .frame(height: payload.type == .battery ? 52 : (payload.type == .bluetooth ? 48 : (payload.type == .whatsapp ? 96 : (payload.type == .incomingCall ? ((payload.iconName == "video.fill" || (payload.subtitle?.lowercased().contains("video") == true)) ? 92 : 66) : 46))))
     }
     
     // MARK: - 1. Charging Toast (Enlarged Morphing Capsule 370x52)
@@ -382,6 +382,84 @@ public struct WhatsAppToastContentView: View {
     }
 }
 
+public struct CameraFramingBoxView: View {
+    @ObservedObject var camera = CameraPreviewService.shared
+    let fallbackName: String
+    let fallbackAvatar: String?
+    
+    public init(fallbackName: String, fallbackAvatar: String?) {
+        self.fallbackName = fallbackName
+        self.fallbackAvatar = fallbackAvatar
+    }
+    
+    public var body: some View {
+        ZStack {
+            if camera.isAuthorized && camera.hasCamera {
+                CameraPreviewView()
+                    .frame(width: 105, height: 68)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [Color.white.opacity(0.4), Color(red: 0.18, green: 0.86, blue: 0.44).opacity(0.5), Color.white.opacity(0.12)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1.2
+                            )
+                    )
+            } else {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.white.opacity(0.08))
+                        .frame(width: 105, height: 68)
+                    
+                    ContactAvatarView(
+                        name: fallbackName,
+                        imagePath: fallbackAvatar,
+                        size: 38,
+                        appBadge: nil
+                    )
+                }
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(Color.white.opacity(0.18), lineWidth: 1)
+                )
+            }
+            
+            // Bottom-left LIVE camera indicator pill
+            VStack {
+                Spacer()
+                HStack {
+                    HStack(spacing: 3.5) {
+                        Circle()
+                            .fill(Color(red: 0.18, green: 0.86, blue: 0.44))
+                            .frame(width: 5.5, height: 5.5)
+                        Image(systemName: "video.fill")
+                            .font(.system(size: 7.5, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                    .padding(.horizontal, 5.5)
+                    .padding(.vertical, 2.5)
+                    .background(Color.black.opacity(0.65))
+                    .clipShape(Capsule())
+                    .padding(5)
+                    
+                    Spacer()
+                }
+            }
+        }
+        .frame(width: 105, height: 68)
+        .onAppear {
+            camera.start()
+        }
+        .onDisappear {
+            camera.stop()
+        }
+    }
+}
+
 public struct IncomingCallToastContentView: View {
     let payload: HUDPayload
     
@@ -389,33 +467,57 @@ public struct IncomingCallToastContentView: View {
         self.payload = payload
     }
     
+    private var isVideo: Bool {
+        payload.iconName == "video.fill" || (payload.subtitle?.lowercased().contains("video") == true)
+    }
+    
     public var body: some View {
-        HStack(spacing: 12) {
-            // Left: Circular Contact Avatar (Screenshot 1)
-            ContactAvatarView(
-                name: payload.title,
-                imagePath: payload.avatarImagePath,
-                size: 44,
-                appBadge: nil
+        if isVideo {
+            widescreenVideoCallView
+        } else {
+            standardAudioCallView
+        }
+    }
+    
+    // MARK: - Option A: Widescreen Video Call with Live Camera Framing Mirror
+    private var widescreenVideoCallView: some View {
+        HStack(spacing: 14) {
+            // Left: Live Camera Framing Mirror
+            CameraFramingBoxView(
+                fallbackName: payload.title,
+                fallbackAvatar: payload.avatarImagePath
             )
-            .padding(.leading, 14)
+            .padding(.leading, 12)
             
-            // Middle: "from iPhone" / "WhatsApp Audio" Subtitle + Bold Caller Name
-            VStack(alignment: .leading, spacing: 2) {
-                Text(payload.subtitle ?? "from iPhone")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.white.opacity(0.65))
-                    .lineLimit(1)
+            // Middle: Caller Details
+            VStack(alignment: .leading, spacing: 3) {
+                // WhatsApp Video Badge
+                HStack(spacing: 4.5) {
+                    Image(systemName: "video.fill")
+                        .font(.system(size: 9, weight: .bold))
+                    Text("WHATSAPP VIDEO")
+                        .font(.system(size: 9.5, weight: .heavy))
+                }
+                .foregroundColor(Color(red: 0.18, green: 0.86, blue: 0.44))
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2.5)
+                .background(Color(red: 0.18, green: 0.86, blue: 0.44).opacity(0.15))
+                .clipShape(Capsule())
                 
                 Text(payload.title)
-                    .font(.system(size: 15.5, weight: .bold))
+                    .font(.system(size: 16.5, weight: .bold))
                     .foregroundColor(.white)
+                    .lineLimit(1)
+                
+                Text("Panggilan Video Masuk...")
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundColor(.white.opacity(0.65))
                     .lineLimit(1)
             }
             
             Spacer(minLength: 8)
             
-            // Right: Dual Interactive Buttons (Decline 🔴 & Answer 🟢)
+            // Right: Dual Interactive Action Buttons (Decline 🔴 & Accept 🟢)
             HStack(spacing: 12) {
                 // Red Decline Button
                 Button(action: {
@@ -437,13 +539,13 @@ public struct IncomingCallToastContentView: View {
                 .buttonStyle(PlainButtonStyle())
                 .help("Tolak Panggilan")
                 
-                // Green Answer Button -> Transitions to Active Call Live Activity!
+                // Green Accept Video Call Button
                 Button(action: {
                     WhatsAppNotificationService.shared.openWhatsApp()
                     IslandState.shared.startActiveCall(
                         caller: payload.title,
-                        source: payload.subtitle ?? "from iPhone",
-                        isVideo: payload.iconName == "video.fill",
+                        source: "WhatsApp Video",
+                        isVideo: true,
                         avatarImagePath: payload.avatarImagePath
                     )
                 }) {
@@ -453,7 +555,82 @@ public struct IncomingCallToastContentView: View {
                             .frame(width: 38, height: 38)
                             .shadow(color: Color(red: 0.18, green: 0.86, blue: 0.44).opacity(0.4), radius: 4)
                         
-                        Image(systemName: payload.iconName == "video.fill" ? "video.fill" : "phone.fill")
+                        Image(systemName: "video.fill")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help("Jawab Video Call")
+            }
+            .padding(.trailing, 14)
+        }
+    }
+    
+    // MARK: - Standard Audio Call View
+    private var standardAudioCallView: some View {
+        HStack(spacing: 12) {
+            // Left: Circular Contact Avatar
+            ContactAvatarView(
+                name: payload.title,
+                imagePath: payload.avatarImagePath,
+                size: 44,
+                appBadge: nil
+            )
+            .padding(.leading, 14)
+            
+            // Middle: "from iPhone" Subtitle + Bold Caller Name
+            VStack(alignment: .leading, spacing: 2) {
+                Text(payload.subtitle ?? "from iPhone")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.white.opacity(0.65))
+                    .lineLimit(1)
+                
+                Text(payload.title)
+                    .font(.system(size: 15.5, weight: .bold))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+            }
+            
+            Spacer(minLength: 8)
+            
+            // Right: Dual Interactive Buttons
+            HStack(spacing: 12) {
+                Button(action: {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        IslandState.shared.activeHUD = nil
+                    }
+                }) {
+                    ZStack {
+                        Circle()
+                            .fill(Color(red: 0.95, green: 0.26, blue: 0.24))
+                            .frame(width: 38, height: 38)
+                            .shadow(color: Color(red: 0.95, green: 0.26, blue: 0.24).opacity(0.35), radius: 4)
+                        
+                        Image(systemName: "phone.down.fill")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help("Tolak Panggilan")
+                
+                Button(action: {
+                    WhatsAppNotificationService.shared.openWhatsApp()
+                    IslandState.shared.startActiveCall(
+                        caller: payload.title,
+                        source: payload.subtitle ?? "from iPhone",
+                        isVideo: false,
+                        avatarImagePath: payload.avatarImagePath
+                    )
+                }) {
+                    ZStack {
+                        Circle()
+                            .fill(Color(red: 0.18, green: 0.86, blue: 0.44))
+                            .frame(width: 38, height: 38)
+                            .shadow(color: Color(red: 0.18, green: 0.86, blue: 0.44).opacity(0.4), radius: 4)
+                        
+                        Image(systemName: "phone.fill")
                             .font(.system(size: 15, weight: .bold))
                             .foregroundColor(.white)
                     }

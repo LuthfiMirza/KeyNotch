@@ -31,7 +31,8 @@ public struct NotchRootView: View {
             } else if hud.type == .whatsapp {
                 return 420
             } else if hud.type == .incomingCall {
-                return 420
+                let isVideo = hud.iconName == "video.fill" || (hud.subtitle?.lowercased().contains("video") == true)
+                return isVideo ? 520 : 420
             }
             return 280
         }
@@ -57,7 +58,8 @@ public struct NotchRootView: View {
             } else if hud.type == .whatsapp {
                 return 96
             } else if hud.type == .incomingCall {
-                return 66
+                let isVideo = hud.iconName == "video.fill" || (hud.subtitle?.lowercased().contains("video") == true)
+                return isVideo ? 92 : 66
             }
             return 46
         }
@@ -80,7 +82,8 @@ public struct NotchRootView: View {
             } else if hud.type == .whatsapp {
                 return 24
             } else if hud.type == .incomingCall {
-                return 24
+                let isVideo = hud.iconName == "video.fill" || (hud.subtitle?.lowercased().contains("video") == true)
+                return isVideo ? 26 : 24
             }
             return 20
         }

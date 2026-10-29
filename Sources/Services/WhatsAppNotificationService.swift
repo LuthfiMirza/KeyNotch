@@ -590,7 +590,12 @@ public final class WhatsAppNotificationService: ObservableObject {
     }
     
     private func isCallVideo(stanzaID: String) -> Bool {
-        guard !stanzaID.isEmpty, FileManager.default.fileExists(atPath: callDBURL.path) else { return false }
+        // 1. If camera is actively in use right now (e.g. WhatsApp opened camera for VC preview)
+        if PrivacyGuardService.shared.isCameraInUse {
+            return true
+        }
+        
+        guard FileManager.default.fileExists(atPath: callDBURL.path) else { return false }
         var db: OpaquePointer?
         let uri = "file:\(callDBURL.path)?mode=ro"
         guard sqlite3_open_v2(uri, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI | SQLITE_OPEN_NOMUTEX, nil) == SQLITE_OK else {
@@ -598,21 +603,37 @@ public final class WhatsAppNotificationService: ObservableObject {
         }
         defer { sqlite3_close(db) }
         
-        let query = """
-        SELECT a.ZVIDEO FROM ZWAAGGREGATECALLEVENT a
-        LEFT JOIN ZWACDCALLEVENT c ON c.Z1CALLEVENTS = a.Z_PK
-        WHERE c.ZCALLIDSTRING = ? LIMIT 1;
-        """
-        var stmt: OpaquePointer?
-        if sqlite3_prepare_v2(db, query, -1, &stmt, nil) == SQLITE_OK {
-            sqlite3_bind_text(stmt, 1, (stanzaID as NSString).utf8String, -1, nil)
-            if sqlite3_step(stmt) == SQLITE_ROW {
-                let isVid = sqlite3_column_int(stmt, 0) == 1
+        // 2. Check by stanzaID if present
+        if !stanzaID.isEmpty {
+            let query = """
+            SELECT a.ZVIDEO FROM ZWAAGGREGATECALLEVENT a
+            LEFT JOIN ZWACDCALLEVENT c ON c.Z1CALLEVENTS = a.Z_PK
+            WHERE c.ZCALLIDSTRING = ? LIMIT 1;
+            """
+            var stmt: OpaquePointer?
+            if sqlite3_prepare_v2(db, query, -1, &stmt, nil) == SQLITE_OK {
+                sqlite3_bind_text(stmt, 1, (stanzaID as NSString).utf8String, -1, nil)
+                if sqlite3_step(stmt) == SQLITE_ROW {
+                    let isVid = sqlite3_column_int(stmt, 0) == 1
+                    sqlite3_finalize(stmt)
+                    return isVid
+                }
                 sqlite3_finalize(stmt)
+            }
+        }
+        
+        // 3. Fallback: Check the most recent incoming call event in CallHistory
+        let recentQuery = "SELECT ZVIDEO FROM ZWAAGGREGATECALLEVENT WHERE ZINCOMING = 1 ORDER BY Z_PK DESC LIMIT 1;"
+        var recentStmt: OpaquePointer?
+        if sqlite3_prepare_v2(db, recentQuery, -1, &recentStmt, nil) == SQLITE_OK {
+            if sqlite3_step(recentStmt) == SQLITE_ROW {
+                let isVid = sqlite3_column_int(recentStmt, 0) == 1
+                sqlite3_finalize(recentStmt)
                 return isVid
             }
-            sqlite3_finalize(stmt)
+            sqlite3_finalize(recentStmt)
         }
+        
         return false
     }
     

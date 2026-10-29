@@ -101,6 +101,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         }
         
         DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("com.keynotch.triggerVideoCallHUD"),
+            object: nil,
+            queue: .main
+        ) { _ in
+            WhatsAppNotificationService.shared.simulateIncomingCall(caller: "fuad UGSI", isVideo: true, source: "WhatsApp Video")
+        }
+        
+        DistributedNotificationCenter.default().addObserver(
             forName: NSNotification.Name("com.keynotch.triggerActiveCall"),
             object: nil,
             queue: .main
@@ -312,12 +320,20 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         menu.addItem(testWAItem)
         
         let testCallItem = NSMenuItem(
-            title: "📞 Test Incoming Call (Wesley Tingey)",
+            title: "📞 Test Incoming Audio Call (Wesley Tingey)",
             action: #selector(testIncomingCallHUD),
             keyEquivalent: ""
         )
         testCallItem.target = self
         menu.addItem(testCallItem)
+        
+        let testVideoCallItem = NSMenuItem(
+            title: "📹 Test WhatsApp Video Call (VC + Camera)",
+            action: #selector(testIncomingVideoCallHUD),
+            keyEquivalent: ""
+        )
+        testVideoCallItem.target = self
+        menu.addItem(testVideoCallItem)
         
         let testActiveCallItem = NSMenuItem(
             title: "🟢 Test Active Call Timer & Waveform",
@@ -411,6 +427,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
     
     @objc private func testIncomingCallHUD() {
         WhatsAppNotificationService.shared.simulateIncomingCall(caller: "Wesley Tingey", isVideo: false, source: "from iPhone")
+    }
+    
+    @objc private func testIncomingVideoCallHUD() {
+        WhatsAppNotificationService.shared.simulateIncomingCall(caller: "fuad UGSI", isVideo: true, source: "WhatsApp Video")
     }
     
     @objc private func testActiveCall() {
