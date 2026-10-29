@@ -4,6 +4,7 @@ public struct NotchRootView: View {
     @ObservedObject var state = IslandState.shared
     @ObservedObject var lyrics = LyricsService.shared
     @ObservedObject var transfer = DownloadTransferService.shared
+    @State private var dragOffset: CGFloat = 0
     
     public init() {}
     
@@ -161,6 +162,17 @@ public struct NotchRootView: View {
     
     // MARK: - Expanded Island View
     
+    private var currentTabIndex: Int {
+        IslandTab.allCases.firstIndex(of: state.selectedTab) ?? 0
+    }
+    
+    private func selectTab(at index: Int) {
+        guard index >= 0 && index < IslandTab.allCases.count else { return }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+            state.selectedTab = IslandTab.allCases[index]
+        }
+    }
+    
     private var pendingRemindersCount: Int {
         if let data = UserDefaults.standard.data(forKey: "keynotch_quick_notes"),
            let notes = try? JSONDecoder().decode([NoteItem].self, from: data) {
@@ -171,97 +183,171 @@ public struct NotchRootView: View {
     }
     
     private var expandedView: some View {
-        VStack(spacing: 12) {
-            // Header Bar: Navigation Tabs + Collapse Button
-            HStack(spacing: 6) {
-                ForEach(IslandTab.allCases) { tab in
+        VStack(spacing: 8) {
+            // MARK: - Minimal Top Header (Tab Title, Badges, Collapse)
+            HStack(spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: state.selectedTab.iconName)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.white.opacity(0.85))
+                    
+                    Text(state.selectedTab.rawValue)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.white)
+                    
+                    // Badges for Reminders or Active Download
+                    if state.selectedTab == .notes && pendingRemindersCount > 0 {
+                        Text("\(pendingRemindersCount)")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(.yellow)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Color.yellow.opacity(0.18))
+                            .clipShape(Capsule())
+                    } else if state.selectedTab == .shelf {
+                        if let primary = transfer.primaryTransfer {
+                            Text("\(primary.percentageString)")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(.cyan)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(Color.cyan.opacity(0.18))
+                                .clipShape(Capsule())
+                        }
+                    }
+                }
+                
+                Spacer()
+                
+                // Subtle Prev/Next Chevrons & Collapse Button
+                HStack(spacing: 6) {
                     Button(action: {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                            state.selectedTab = tab
+                        if currentTabIndex > 0 {
+                            selectTab(at: currentTabIndex - 1)
                         }
                     }) {
-                        HStack(spacing: 5) {
-                            Image(systemName: tab.iconName)
-                                .font(.system(size: 10.5, weight: .semibold))
-                            
-                            Text(tab.rawValue)
-                                .font(.system(size: 11, weight: .semibold))
-                                .lineLimit(1)
-                                .fixedSize(horizontal: true, vertical: false)
-                            
-                            // Badge for Reminders & Shelf (Matching Reference Design)
-                            if tab == .notes {
-                                Text("\(pendingRemindersCount)")
-                                    .font(.system(size: 9, weight: .bold))
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 4.5)
-                                    .padding(.vertical, 1)
-                                    .background(Color.white.opacity(0.2))
-                                    .clipShape(Capsule())
-                                    .fixedSize(horizontal: true, vertical: false)
-                            } else if tab == .shelf {
-                                Text("1")
-                                    .font(.system(size: 9, weight: .bold))
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 4.5)
-                                    .padding(.vertical, 1)
-                                    .background(Color.white.opacity(0.2))
-                                    .clipShape(Capsule())
-                                    .fixedSize(horizontal: true, vertical: false)
-                            }
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 9.5, weight: .bold))
+                            .foregroundColor(currentTabIndex > 0 ? .white.opacity(0.7) : .white.opacity(0.2))
+                            .frame(width: 22, height: 22)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .disabled(currentTabIndex == 0)
+                    
+                    Button(action: {
+                        if currentTabIndex < IslandTab.allCases.count - 1 {
+                            selectTab(at: currentTabIndex + 1)
                         }
-                        .foregroundColor(state.selectedTab == tab ? .white : .white.opacity(0.45))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                        .background(
-                            state.selectedTab == tab
-                            ? Color.white.opacity(0.15)
-                            : Color.clear
-                        )
-                        .clipShape(Capsule())
+                    }) {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9.5, weight: .bold))
+                            .foregroundColor(currentTabIndex < IslandTab.allCases.count - 1 ? .white.opacity(0.7) : .white.opacity(0.2))
+                            .frame(width: 22, height: 22)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .disabled(currentTabIndex == IslandTab.allCases.count - 1)
+                    
+                    // Collapse Button
+                    Button(action: {
+                        state.collapse()
+                    }) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.12))
+                                .frame(width: 22, height: 22)
+                            
+                            Image(systemName: "chevron.up")
+                                .font(.system(size: 9.5, weight: .bold))
+                                .foregroundColor(.white.opacity(0.8))
+                        }
                     }
                     .buttonStyle(PlainButtonStyle())
                 }
-                
-                Spacer(minLength: 4)
-                
-                // Collapse Button
-                Button(action: {
-                    state.collapse()
-                }) {
-                    ZStack {
-                        Circle()
-                            .fill(Color.white.opacity(0.12))
-                            .frame(width: 24, height: 24)
-                        
-                        Image(systemName: "chevron.up")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundColor(.white.opacity(0.8))
-                    }
-                }
-                .buttonStyle(PlainButtonStyle())
             }
-            .padding(.horizontal, 14)
-            .padding(.top, 10)
+            .padding(.horizontal, 16)
+            .padding(.top, 9)
             
-            // Tab Content Container
-            ZStack {
-                switch state.selectedTab {
-                case .controls:
+            // MARK: - Discrete Horizontal Paging Slider (Uniform 212px Height, Non-Continuous Snapping)
+            GeometryReader { geo in
+                let width = geo.size.width
+                HStack(spacing: 0) {
                     ControlsMediaTabView()
-                case .music:
+                        .frame(width: width, height: 212, alignment: .top)
+                    
                     MusicTabView()
-                case .notes:
+                        .frame(width: width, height: 212, alignment: .top)
+                    
                     NotesTimerTabView()
-                case .devices:
+                        .frame(width: width, height: 212, alignment: .top)
+                    
                     DevicesTabView()
-                case .shelf:
+                        .frame(width: width, height: 212, alignment: .top)
+                    
                     ShelfClipboardTabView()
+                        .frame(width: width, height: 212, alignment: .top)
+                }
+                .offset(x: -CGFloat(currentTabIndex) * width + dragOffset)
+                .gesture(
+                    DragGesture(minimumDistance: 15)
+                        .onChanged { value in
+                            let translation = value.translation.width
+                            // Apply resistance at edges
+                            if (currentTabIndex == 0 && translation > 0) ||
+                               (currentTabIndex == IslandTab.allCases.count - 1 && translation < 0) {
+                                dragOffset = translation * 0.25
+                            } else {
+                                dragOffset = translation
+                            }
+                        }
+                        .onEnded { value in
+                            let threshold: CGFloat = 45
+                            let predicted = value.predictedEndTranslation.width
+                            
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+                                if (value.translation.width < -threshold || predicted < -120) && currentTabIndex < IslandTab.allCases.count - 1 {
+                                    selectTab(at: currentTabIndex + 1)
+                                } else if (value.translation.width > threshold || predicted > 120) && currentTabIndex > 0 {
+                                    selectTab(at: currentTabIndex - 1)
+                                }
+                                dragOffset = 0
+                            }
+                        }
+                )
+            }
+            .frame(height: 212)
+            .clipped()
+            
+            // MARK: - Bottom Dot Page Indicator (Interactive & Centered with Bottom Padding)
+            HStack(spacing: 7) {
+                ForEach(0..<IslandTab.allCases.count, id: \.self) { index in
+                    let isSelected = currentTabIndex == index
+                    Button(action: {
+                        selectTab(at: index)
+                    }) {
+                        ZStack {
+                            if isSelected {
+                                Capsule()
+                                    .fill(Color.white)
+                                    .frame(width: 18, height: 5.5)
+                                    .shadow(color: Color.white.opacity(0.4), radius: 2)
+                            } else {
+                                Circle()
+                                    .fill(Color.white.opacity(0.28))
+                                    .frame(width: 5.5, height: 5.5)
+                            }
+                        }
+                        .contentShape(Rectangle().size(width: 22, height: 16))
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .help(IslandTab.allCases[index].rawValue)
                 }
             }
-            .transition(.opacity)
-            
-            Spacer(minLength: 0)
+            .padding(.top, 4)
+            .padding(.bottom, 10)
         }
     }
 }
