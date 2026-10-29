@@ -52,10 +52,11 @@ public struct MusicTabView: View {
     
     private var splitLyricsView: some View {
         HStack(spacing: 0) {
-            // LEFT: Track Info, Scrubber, & Controls (~290px)
+            // LEFT: Track Info, Scrubber, & Controls (~310px, with 26pt comfortable breathing room from left curve)
             leftPlayerColumn
-                .frame(width: 290)
-                .padding(.horizontal, 14)
+                .frame(width: 310)
+                .padding(.leading, 26)
+                .padding(.trailing, 16)
                 .padding(.vertical, 8)
             
             // Vertical Subtle Divider
@@ -65,10 +66,11 @@ public struct MusicTabView: View {
                 .padding(.vertical, 8)
                 .padding(.horizontal, 4)
             
-            // RIGHT: Clean Synced Lyrics View (~360px)
+            // RIGHT: Clean Synced Lyrics View (~360px, balanced padding)
             rightLyricsColumn
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.horizontal, 16)
+                .padding(.leading, 18)
+                .padding(.trailing, 24)
                 .padding(.vertical, 6)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
