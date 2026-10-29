@@ -40,11 +40,13 @@ public struct HUDToastView: View {
                 sliderToastView
             case .whatsapp:
                 whatsAppToastView
+            case .incomingCall:
+                incomingCallToastView
             default:
                 standardToastView
             }
         }
-        .frame(height: payload.type == .battery ? 52 : (payload.type == .bluetooth ? 48 : (payload.type == .whatsapp ? 54 : 46)))
+        .frame(height: payload.type == .battery ? 52 : (payload.type == .bluetooth ? 48 : (payload.type == .whatsapp ? 54 : (payload.type == .incomingCall ? 62 : 46))))
     }
     
     // MARK: - 1. Charging Toast (Enlarged Morphing Capsule 370x52)
@@ -332,5 +334,135 @@ public struct HUDToastView: View {
             }
         }
         .buttonStyle(PlainButtonStyle())
+    }
+    
+    // MARK: - 5. Incoming Call Toast (Enlarged Morphing Capsule 420x62)
+    
+    private var incomingCallToastView: some View {
+        IncomingCallToastContentView(payload: payload)
+    }
+}
+
+public struct IncomingCallToastContentView: View {
+    let payload: HUDPayload
+    @State private var isRingingAnim: Bool = false
+    
+    public init(payload: HUDPayload) {
+        self.payload = payload
+    }
+    
+    public var body: some View {
+        HStack(spacing: 12) {
+            // Left: Glowing Animated Call Icon
+            ZStack {
+                // Pulsing outer halo ring
+                Circle()
+                    .stroke(Color(red: 0.18, green: 0.86, blue: 0.44).opacity(isRingingAnim ? 0.40 : 0.08), lineWidth: 2)
+                    .frame(width: 44, height: 44)
+                    .scaleEffect(isRingingAnim ? 1.08 : 0.94)
+                
+                // Icon background circle
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.18, green: 0.86, blue: 0.44),
+                                Color(red: 0.08, green: 0.68, blue: 0.32)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 36, height: 36)
+                    .shadow(color: Color(red: 0.18, green: 0.86, blue: 0.44).opacity(0.45), radius: 6)
+                
+                Image(systemName: payload.iconName)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(.white)
+                    .rotationEffect(.degrees(isRingingAnim ? -8 : 8))
+            }
+            .padding(.leading, 14)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
+                    isRingingAnim = true
+                }
+            }
+            
+            // Middle: Caller Name & Subtitle
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(payload.title)
+                        .font(.system(size: 14.5, weight: .bold))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                    
+                    Text("WhatsApp")
+                        .font(.system(size: 8.5, weight: .bold))
+                        .foregroundColor(Color(red: 0.15, green: 0.83, blue: 0.40))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1.5)
+                        .background(Color(red: 0.15, green: 0.83, blue: 0.40).opacity(0.18))
+                        .clipShape(Capsule())
+                }
+                
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(Color(red: 0.18, green: 0.86, blue: 0.44))
+                        .frame(width: 5, height: 5)
+                    
+                    Text(payload.subtitle ?? "Panggilan Masuk...")
+                        .font(.system(size: 11, weight: .regular))
+                        .foregroundColor(.white.opacity(0.72))
+                        .lineLimit(1)
+                }
+            }
+            
+            Spacer(minLength: 8)
+            
+            // Right: Dual Interactive Buttons (Decline & Answer)
+            HStack(spacing: 10) {
+                // Red Decline Button
+                Button(action: {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        IslandState.shared.activeHUD = nil
+                    }
+                }) {
+                    ZStack {
+                        Circle()
+                            .fill(Color(red: 0.95, green: 0.26, blue: 0.24))
+                            .frame(width: 36, height: 36)
+                            .shadow(color: Color(red: 0.95, green: 0.26, blue: 0.24).opacity(0.35), radius: 4)
+                        
+                        Image(systemName: "phone.down.fill")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help("Tolak Panggilan")
+                
+                // Green Answer Button
+                Button(action: {
+                    WhatsAppNotificationService.shared.openWhatsApp()
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        IslandState.shared.activeHUD = nil
+                    }
+                }) {
+                    ZStack {
+                        Circle()
+                            .fill(Color(red: 0.18, green: 0.86, blue: 0.44))
+                            .frame(width: 36, height: 36)
+                            .shadow(color: Color(red: 0.18, green: 0.86, blue: 0.44).opacity(0.4), radius: 4)
+                        
+                        Image(systemName: payload.iconName == "video.fill" ? "video.fill" : "phone.fill")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help("Jawab di WhatsApp")
+            }
+            .padding(.trailing, 14)
+        }
     }
 }

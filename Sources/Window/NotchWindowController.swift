@@ -266,6 +266,12 @@ public final class NotchWindowController: NSObject {
             } else if hud.type == .bluetooth {
                 width = 360
                 height = 48
+            } else if hud.type == .whatsapp {
+                width = 390
+                height = 54
+            } else if hud.type == .incomingCall {
+                width = 420
+                height = 62
             } else {
                 width = 280
                 height = 46

@@ -29,6 +29,8 @@ public struct NotchRootView: View {
                 return 360
             } else if hud.type == .whatsapp {
                 return 390
+            } else if hud.type == .incomingCall {
+                return 420
             }
             return 280
         }
@@ -48,6 +50,8 @@ public struct NotchRootView: View {
                 return 48
             } else if hud.type == .whatsapp {
                 return 54
+            } else if hud.type == .incomingCall {
+                return 62
             }
             return 46
         }
@@ -66,6 +70,8 @@ public struct NotchRootView: View {
                 return 21
             } else if hud.type == .whatsapp {
                 return 23
+            } else if hud.type == .incomingCall {
+                return 26
             }
             return 20
         }
@@ -83,6 +89,8 @@ public struct NotchRootView: View {
                 return 7.5
             } else if hud.type == .whatsapp {
                 return 8.5
+            } else if hud.type == .incomingCall {
+                return 9
             }
             return 7
         }

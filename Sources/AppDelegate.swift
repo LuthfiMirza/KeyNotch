@@ -89,6 +89,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         ) { _ in
             WhatsAppNotificationService.shared.simulateIncomingMessage()
         }
+        
+        DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("com.keynotch.triggerCallHUD"),
+            object: nil,
+            queue: .main
+        ) { _ in
+            WhatsAppNotificationService.shared.simulateIncomingCall()
+        }
     }
     
     // MARK: - Menu Bar Setup
@@ -280,6 +288,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         testWAItem.target = self
         menu.addItem(testWAItem)
         
+        let testCallItem = NSMenuItem(
+            title: "📞 Test Incoming Call HUD",
+            action: #selector(testIncomingCallHUD),
+            keyEquivalent: ""
+        )
+        testCallItem.target = self
+        menu.addItem(testCallItem)
+        
         menu.addItem(NSMenuItem.separator())
         
         // Quit
@@ -360,6 +376,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
     
     @objc private func testWhatsAppHUD() {
         WhatsAppNotificationService.shared.simulateIncomingMessage()
+    }
+    
+    @objc private func testIncomingCallHUD() {
+        WhatsAppNotificationService.shared.simulateIncomingCall(caller: "Eca 🥰", isVideo: false)
     }
     
     @objc private func pickScreenColor() {
