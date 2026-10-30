@@ -29,7 +29,7 @@ public struct NotchRootView: View {
             } else if hud.type == .bluetooth {
                 return 360
             } else if hud.type == .whatsapp {
-                return state.isReplyingWhatsApp ? 420 : 380
+                return state.isReplyingWhatsApp ? 430 : 380
             } else if hud.type == .incomingCall {
                 let isVideo = hud.iconName == "video.fill" || (hud.subtitle?.lowercased().contains("video") == true)
                 return isVideo ? 520 : 420
@@ -56,7 +56,7 @@ public struct NotchRootView: View {
             } else if hud.type == .bluetooth {
                 return 48
             } else if hud.type == .whatsapp {
-                return state.isReplyingWhatsApp ? 96 : 52
+                return state.isReplyingWhatsApp ? 98 : 52
             } else if hud.type == .incomingCall {
                 let isVideo = hud.iconName == "video.fill" || (hud.subtitle?.lowercased().contains("video") == true)
                 return isVideo ? 92 : 66
@@ -192,11 +192,12 @@ public struct NotchRootView: View {
                         )
                     )
                 }
-                .frame(width: currentWidth, height: currentHeight)
+                .frame(width: currentWidth, height: currentHeight, alignment: .top)
                 .animation(.spring(response: 0.35, dampingFraction: 0.78), value: state.isExpanded)
                 .animation(.spring(response: 0.36, dampingFraction: 0.78), value: lyrics.isLyricsExpanded)
                 .animation(.spring(response: 0.35, dampingFraction: 0.78), value: state.isPeeking)
                 .animation(.spring(response: 0.38, dampingFraction: 0.72), value: state.activeHUD)
+                .animation(.spring(response: 0.35, dampingFraction: 0.78), value: state.isReplyingWhatsApp)
                 .animation(.spring(response: 0.35, dampingFraction: 0.78), value: state.activeCall)
                 .animation(.spring(response: 0.35, dampingFraction: 0.78), value: state.shouldHideForFullScreen)
             }

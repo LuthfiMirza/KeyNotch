@@ -46,7 +46,13 @@ public struct HUDToastView: View {
                 standardToastView
             }
         }
-        .frame(height: payload.type == .battery ? 52 : (payload.type == .bluetooth ? 48 : (payload.type == .whatsapp ? (IslandState.shared.isReplyingWhatsApp ? 96 : 52) : (payload.type == .incomingCall ? ((payload.iconName == "video.fill" || (payload.subtitle?.lowercased().contains("video") == true)) ? 92 : 66) : 46))))
+        .frame(
+            height: payload.type == .battery ? 52 :
+                    (payload.type == .bluetooth ? 48 :
+                    (payload.type == .whatsapp ? (IslandState.shared.isReplyingWhatsApp ? 98 : 52) :
+                    (payload.type == .incomingCall ? ((payload.iconName == "video.fill" || (payload.subtitle?.lowercased().contains("video") == true)) ? 92 : 66) : 46))),
+            alignment: .top
+        )
     }
     
     // MARK: - 1. Charging Toast (Enlarged Morphing Capsule 370x52)
@@ -299,6 +305,7 @@ public struct WhatsAppToastContentView: View {
                 compactNotificationView
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
     
     // MARK: - 1. Compact Non-Intrusive Notification Toast (Zero Focus Stealing)
@@ -360,6 +367,7 @@ public struct WhatsAppToastContentView: View {
             .buttonStyle(PlainButtonStyle())
             .padding(.trailing, 14)
         }
+        .frame(height: 52, alignment: .center)
         .contentShape(Rectangle())
         .onTapGesture {
             state.enterWhatsAppReplyMode()
@@ -373,7 +381,7 @@ public struct WhatsAppToastContentView: View {
     private var expandedReplyView: some View {
         VStack(spacing: 8) {
             // Top Row: Avatar + Name + Subtitle + Cancel Close Button
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .center, spacing: 12) {
                 ContactAvatarView(
                     name: payload.title,
                     imagePath: payload.avatarImagePath,
@@ -399,9 +407,11 @@ public struct WhatsAppToastContentView: View {
                             state.dismissHUD()
                         }) {
                             Image(systemName: "xmark")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundColor(.white.opacity(0.65))
-                                .padding(4)
+                                .font(.system(size: 9.5, weight: .bold))
+                                .foregroundColor(.white.opacity(0.75))
+                                .padding(5)
+                                .background(Color.white.opacity(0.12))
+                                .clipShape(Circle())
                         }
                         .buttonStyle(PlainButtonStyle())
                     }
@@ -451,7 +461,9 @@ public struct WhatsAppToastContentView: View {
             )
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.top, 12)
+        .padding(.bottom, 10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 isFieldFocused = true

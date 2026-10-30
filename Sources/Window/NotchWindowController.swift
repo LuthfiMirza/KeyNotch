@@ -280,8 +280,8 @@ public final class NotchWindowController: NSObject {
                 width = 360
                 height = 48
             } else if hud.type == .whatsapp {
-                width = state.isReplyingWhatsApp ? 420 : 380
-                height = state.isReplyingWhatsApp ? 96 : 52
+                width = state.isReplyingWhatsApp ? 430 : 380
+                height = state.isReplyingWhatsApp ? 98 : 52
             } else if hud.type == .incomingCall {
                 let isVideo = hud.iconName == "video.fill" || (hud.subtitle?.lowercased().contains("video") == true)
                 width = isVideo ? 520 : 420
