@@ -96,13 +96,15 @@ public final class NotchWindowController: NSObject {
             }
             .store(in: &cancellables)
             
-        // Make panel key when WhatsApp Quick Reply HUD appears so user can type immediately
-        state.$activeHUD
+        // Only make panel key window when user explicitly enters WhatsApp reply mode (clicked to reply)
+        state.$isReplyingWhatsApp
             .receive(on: RunLoop.main)
-            .sink { [weak self] hud in
+            .sink { [weak self] isReplying in
                 guard let self = self, let panel = self.panel else { return }
-                if hud?.type == .whatsapp {
+                if isReplying {
                     panel.makeKey()
+                } else if IslandState.shared.selectedTab != .notes {
+                    panel.resignKey()
                 }
             }
             .store(in: &cancellables)
@@ -278,8 +280,8 @@ public final class NotchWindowController: NSObject {
                 width = 360
                 height = 48
             } else if hud.type == .whatsapp {
-                width = 420
-                height = 96
+                width = state.isReplyingWhatsApp ? 420 : 380
+                height = state.isReplyingWhatsApp ? 96 : 52
             } else if hud.type == .incomingCall {
                 let isVideo = hud.iconName == "video.fill" || (hud.subtitle?.lowercased().contains("video") == true)
                 width = isVideo ? 520 : 420

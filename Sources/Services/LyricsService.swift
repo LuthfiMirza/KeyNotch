@@ -115,9 +115,10 @@ public final class LyricsService: ObservableObject {
         var searchQueries: [String] = []
         if !cleanedArtist.isEmpty && cleanedArtist.lowercased() != "unknown artist" {
             searchQueries.append("\(cleanedTitle) \(cleanedArtist)")
+            searchQueries.append("\(cleanedArtist) \(cleanedTitle)")
         }
         
-        for sep in [" - ", " – ", " — "] {
+        for sep in [" - ", " – ", " — ", " | "] {
             if title.contains(sep) {
                 let parts = title.components(separatedBy: sep)
                 if parts.count >= 2 {
@@ -125,10 +126,15 @@ public final class LyricsService: ObservableObject {
                     let p1 = cleanTrackTitle(parts[1...].joined(separator: sep))
                     searchQueries.append("\(p0) \(p1)")
                     searchQueries.append("\(p1) \(p0)")
+                    searchQueries.append(p0)
+                    searchQueries.append(p1)
                 }
             }
         }
         searchQueries.append(cleanedTitle)
+        if !cleanedArtist.isEmpty && cleanedArtist.lowercased() != "unknown artist" {
+            searchQueries.append(cleanedArtist)
+        }
         
         var uniqueQueries: [String] = []
         for q in searchQueries {
@@ -192,7 +198,8 @@ public final class LyricsService: ObservableObject {
                         let sc = self.calculateCandidateScore(
                             item: item,
                             targetArtist: targetArtist,
-                            targetDuration: targetDuration
+                            targetDuration: targetDuration,
+                            targetTitle: rawTitle
                         )
                         return (item: item, score: sc)
                     }.sorted { $0.score < $1.score }
@@ -200,6 +207,20 @@ public final class LyricsService: ObservableObject {
                     if let best = scored.first, best.score < 500.0 {
                         if let synced = best.item["syncedLyrics"] as? String, !synced.isEmpty {
                             let parsed = self.parseLRC(content: synced)
+                            if !parsed.isEmpty {
+                                self.cache[cacheKey] = parsed
+                                self.lyrics = parsed
+                                self.isLoading = false
+                                self.statusMessage = nil
+                                self.updateCurrentLine(for: MediaRemoteService.shared.elapsedTime)
+                                return
+                            }
+                        } else if let plain = best.item["plainLyrics"] as? String, !plain.isEmpty {
+                            let lines = plain.components(separatedBy: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+                            let lineInterval = targetDuration > 0 ? (targetDuration / Double(max(1, lines.count))) : 4.0
+                            let parsed = lines.enumerated().map { idx, line in
+                                LyricLine(id: idx, time: Double(idx) * lineInterval, text: line)
+                            }
                             if !parsed.isEmpty {
                                 self.cache[cacheKey] = parsed
                                 self.lyrics = parsed
@@ -276,9 +297,23 @@ public final class LyricsService: ObservableObject {
         self.statusMessage = "No synchronized lyrics found"
     }
     
-    private func calculateCandidateScore(item: [String: Any], targetArtist: String, targetDuration: Double) -> Double {
+    private func calculateCandidateScore(
+        item: [String: Any],
+        targetArtist: String,
+        targetDuration: Double,
+        targetTitle: String
+    ) -> Double {
         let synced = item["syncedLyrics"] as? String
-        guard let syncedLyrics = synced, !syncedLyrics.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        let plain = item["plainLyrics"] as? String
+        
+        var score: Double = 0.0
+        
+        // Prefer syncedLyrics; if only plainLyrics exists, add modest penalty
+        if let syncedLyrics = synced, !syncedLyrics.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            score += 0.0
+        } else if let plainLyrics = plain, !plainLyrics.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            score += 25.0
+        } else {
             return 999999.0
         }
         
@@ -286,35 +321,50 @@ public final class LyricsService: ObservableObject {
         let candidateTrack = (item["trackName"] as? String ?? "").lowercased()
         let candidateDuration = item["duration"] as? Double ?? 0.0
         
-        var score: Double = 0.0
+        let targetArt = targetArtist.lowercased()
+        let targetTit = targetTitle.lowercased()
         
-        // 1. Artist matching
-        if !targetArtist.isEmpty && targetArtist.lowercased() != "unknown artist" {
-            let targetArt = targetArtist.lowercased()
-            if candidateArtist == targetArt {
-                score += 0.0
-            } else if candidateArtist.contains(targetArt) || targetArt.contains(candidateArtist) {
-                score += 10.0
-            } else {
-                score += 260.0 // Artist mismatch penalty
+        // 1. Artist & Title matching (supports swapped metadata)
+        var artistMatched = false
+        if !targetArt.isEmpty && targetArt != "unknown artist" {
+            if candidateArtist == targetArt || candidateArtist.contains(targetArt) || targetArt.contains(candidateArtist) {
+                artistMatched = true
+            } else if candidateTrack == targetArt || candidateTrack.contains(targetArt) || targetArt.contains(candidateTrack) {
+                // Inverted match: candidateTrack matches targetArtist
+                artistMatched = true
+                score += 15.0
             }
         }
         
-        // 2. Duration matching
+        if !targetTit.isEmpty {
+            if candidateTrack == targetTit || candidateTrack.contains(targetTit) || targetTit.contains(candidateTrack) {
+                score += 0.0
+            } else if candidateArtist == targetTit || candidateArtist.contains(targetTit) || targetTit.contains(candidateArtist) {
+                // Inverted match: candidateArtist matches targetTitle
+                artistMatched = true
+                score += 15.0
+            }
+        }
+        
+        if !artistMatched && !targetArt.isEmpty && targetArt != "unknown artist" {
+            score += 140.0
+        }
+        
+        // 2. Duration matching (capped to handle music video versions)
         if targetDuration > 0 && candidateDuration > 0 {
             let diff = abs(candidateDuration - targetDuration)
-            if diff <= 2.5 {
-                score += 0.0 // Virtually identical cut
-            } else if diff <= 6.0 {
-                score += diff * 1.5
+            if diff <= 3.0 {
+                score += 0.0
+            } else if diff <= 8.0 {
+                score += diff * 1.2
             } else {
-                score += diff * 4.0 // Heavily penalize cut / extended / radio versions
+                score += min(75.0, 10.0 + (diff * 0.5))
             }
         }
         
         // 3. Unwanted versions penalty
         for unwanted in ["live", "acoustic", "remix", "tribute", "karaoke", "instrumental", "cover"] {
-            if candidateTrack.contains(unwanted) && !targetArtist.lowercased().contains(unwanted) {
+            if candidateTrack.contains(unwanted) && !targetArt.contains(unwanted) {
                 score += 60.0
             }
         }
@@ -419,6 +469,9 @@ public final class LyricsService: ObservableObject {
             "(lyric video", "[lyric video",
             "(visualizer", "[visualizer",
             "(video)", "(audio)",
+            "[mv]", "(mv)",
+            "(lyrics)", "[lyrics]",
+            "(official)", "[official]",
             "(hd)", "[hd]", "(4k", "[4k",
             "(live", "[live",
             " - remastered", " [remastered]", "(remastered",

@@ -203,7 +203,12 @@ public final class WhatsAppNotificationService: ObservableObject {
         if sqlite3_open_v2(uri, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI | SQLITE_OPEN_NOMUTEX, nil) == SQLITE_OK {
             // Baseline for regular messages (ignoring calls)
             var msgStmt: OpaquePointer?
-            let msgSql = "SELECT MAX(Z_PK) FROM ZWAMESSAGE WHERE ZISFROMME = 0 AND ZMESSAGETYPE NOT IN (59, 10);"
+            let msgSql = """
+            SELECT MAX(m.Z_PK) FROM ZWAMESSAGE m
+            LEFT JOIN ZWACHATSESSION s ON m.ZCHATSESSION = s.Z_PK
+            WHERE m.ZISFROMME = 0 AND m.ZMESSAGETYPE NOT IN (59, 10)
+              AND (s.ZCONTACTJID IS NULL OR s.ZCONTACTJID NOT LIKE '%@newsletter%');
+            """
             if sqlite3_prepare_v2(db, msgSql, -1, &msgStmt, nil) == SQLITE_OK {
                 if sqlite3_step(msgStmt) == SQLITE_ROW {
                     self.lastSeenMessagePK = sqlite3_column_int64(msgStmt, 0)
@@ -399,8 +404,18 @@ public final class WhatsAppNotificationService: ObservableObject {
             COALESCE(s.ZCONTACTIDENTIFIER, '')
         FROM ZWAMESSAGE m
         LEFT JOIN ZWACHATSESSION s ON m.ZCHATSESSION = s.Z_PK
+        LEFT JOIN ZWACHATPUSHCONFIG pc ON (pc.ZJID = s.ZCONTACTJID OR (s.ZCONTACTIDENTIFIER IS NOT NULL AND pc.ZJID = s.ZCONTACTIDENTIFIER))
+        LEFT JOIN ZWACHATPROPERTIES p ON s.ZPROPERTIES = p.Z_PK
         WHERE m.ZISFROMME = 0 
           AND m.ZMESSAGETYPE NOT IN (59, 10)
+          AND (s.ZCONTACTJID IS NULL OR s.ZCONTACTJID NOT LIKE '%@newsletter%')
+          AND (COALESCE(m.ZTOJID, '') NOT LIKE '%@newsletter%')
+          AND (COALESCE(m.ZFROMJID, '') NOT LIKE '%@newsletter%')
+          AND (s.ZARCHIVED IS NULL OR s.ZARCHIVED = 0)
+          AND (pc.ZALERTS IS NULL OR pc.ZALERTS != 0)
+          AND (pc.ZMUTEDUNTIL IS NULL OR pc.ZMUTEDUNTIL = 0 OR pc.ZMUTEDUNTIL < (strftime('%s', 'now') - 978307200))
+          AND (p.ZMUTEDATE IS NULL)
+          AND (p.ZALERTS IS NULL OR p.ZALERTS != 0)
           AND m.Z_PK > ?
         ORDER BY m.Z_PK ASC
         LIMIT 5;

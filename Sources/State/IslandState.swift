@@ -114,6 +114,7 @@ public final class IslandState: ObservableObject {
     @Published public var selectedTab: IslandTab = .controls
     @Published public var activeHUD: HUDPayload? = nil
     @Published public var activeCall: ActiveCallState? = nil
+    @Published public var isReplyingWhatsApp: Bool = false
     
     // Notch Dimensions & Hardware Awareness
     @Published public var hasPhysicalNotch: Bool = false
@@ -273,6 +274,7 @@ public final class IslandState: ObservableObject {
         }
         
         hudDismissTimer?.cancel()
+        self.isReplyingWhatsApp = false
         withAnimation(.spring(response: 0.38, dampingFraction: 0.72)) {
             activeHUD = payload
         }
@@ -282,8 +284,24 @@ public final class IslandState: ObservableObject {
             .sink { [weak self] _ in
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
                     self?.activeHUD = nil
+                    self?.isReplyingWhatsApp = false
                 }
             }
+    }
+    
+    public func enterWhatsAppReplyMode() {
+        hudDismissTimer?.cancel()
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+            self.isReplyingWhatsApp = true
+        }
+    }
+    
+    public func dismissHUD() {
+        hudDismissTimer?.cancel()
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+            self.activeHUD = nil
+            self.isReplyingWhatsApp = false
+        }
     }
     
     // MARK: - Active Ongoing Call (Compact Notch Live Activity)

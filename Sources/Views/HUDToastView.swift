@@ -46,7 +46,7 @@ public struct HUDToastView: View {
                 standardToastView
             }
         }
-        .frame(height: payload.type == .battery ? 52 : (payload.type == .bluetooth ? 48 : (payload.type == .whatsapp ? 96 : (payload.type == .incomingCall ? ((payload.iconName == "video.fill" || (payload.subtitle?.lowercased().contains("video") == true)) ? 92 : 66) : 46))))
+        .frame(height: payload.type == .battery ? 52 : (payload.type == .bluetooth ? 48 : (payload.type == .whatsapp ? (IslandState.shared.isReplyingWhatsApp ? 96 : 52) : (payload.type == .incomingCall ? ((payload.iconName == "video.fill" || (payload.subtitle?.lowercased().contains("video") == true)) ? 92 : 66) : 46))))
     }
     
     // MARK: - 1. Charging Toast (Enlarged Morphing Capsule 370x52)
@@ -283,6 +283,7 @@ public struct HUDToastView: View {
 
 public struct WhatsAppToastContentView: View {
     let payload: HUDPayload
+    @ObservedObject var state = IslandState.shared
     @State private var replyText: String = ""
     @FocusState private var isFieldFocused: Bool
     
@@ -291,49 +292,130 @@ public struct WhatsAppToastContentView: View {
     }
     
     public var body: some View {
-        VStack(spacing: 8) {
-            // Top: Contact Avatar with App Badge + Name + "now" + Message Preview
+        Group {
+            if state.isReplyingWhatsApp {
+                expandedReplyView
+            } else {
+                compactNotificationView
+            }
+        }
+    }
+    
+    // MARK: - 1. Compact Non-Intrusive Notification Toast (Zero Focus Stealing)
+    private var compactNotificationView: some View {
+        HStack(spacing: 12) {
+            // Contact Avatar with WhatsApp Badge
+            ContactAvatarView(
+                name: payload.title,
+                imagePath: payload.avatarImagePath,
+                size: 34,
+                appBadge: "whatsapp"
+            )
+            .padding(.leading, 14)
+            
+            // Sender Name + Message Preview
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(payload.title)
+                        .font(.system(size: 13.5, weight: .bold))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                    
+                    Text("·")
+                        .foregroundColor(.white.opacity(0.35))
+                        .font(.system(size: 11))
+                    
+                    Text(payload.timestampText ?? "now")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.white.opacity(0.45))
+                }
+                
+                Text(payload.subtitle ?? "Pesan baru")
+                    .font(.system(size: 11.5, weight: .regular))
+                    .foregroundColor(.white.opacity(0.85))
+                    .lineLimit(1)
+            }
+            
+            Spacer(minLength: 8)
+            
+            // "Balas" Pill Button (Clicking enters reply mode without auto-triggering)
             Button(action: {
-                WhatsAppNotificationService.shared.openWhatsApp()
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
-                    IslandState.shared.activeHUD = nil
+                state.enterWhatsAppReplyMode()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    isFieldFocused = true
                 }
             }) {
-                HStack(alignment: .top, spacing: 12) {
-                    ContactAvatarView(
-                        name: payload.title,
-                        imagePath: payload.avatarImagePath,
-                        size: 38,
-                        appBadge: "whatsapp"
-                    )
-                    
-                    VStack(alignment: .leading, spacing: 2.5) {
-                        HStack {
-                            Text(payload.title)
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundColor(.white)
-                                .lineLimit(1)
-                            
-                            Spacer()
-                            
-                            Text(payload.timestampText ?? "now")
-                                .font(.system(size: 11.5, weight: .medium))
-                                .foregroundColor(.white.opacity(0.45))
-                        }
-                        
-                        Text(payload.subtitle ?? "Pesan baru")
-                            .font(.system(size: 12, weight: .regular))
-                            .foregroundColor(.white.opacity(0.85))
-                            .lineLimit(2)
-                            .multilineTextAlignment(.leading)
-                    }
+                HStack(spacing: 4) {
+                    Image(systemName: "arrowshape.turn.up.left.fill")
+                        .font(.system(size: 9.5, weight: .semibold))
+                    Text("Balas")
+                        .font(.system(size: 11, weight: .semibold))
                 }
+                .foregroundColor(.white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Color.white.opacity(0.14))
+                .clipShape(Capsule())
             }
             .buttonStyle(PlainButtonStyle())
+            .padding(.trailing, 14)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            state.enterWhatsAppReplyMode()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                isFieldFocused = true
+            }
+        }
+    }
+    
+    // MARK: - 2. Expanded Quick Reply View (Only active when user clicks)
+    private var expandedReplyView: some View {
+        VStack(spacing: 8) {
+            // Top Row: Avatar + Name + Subtitle + Cancel Close Button
+            HStack(alignment: .top, spacing: 12) {
+                ContactAvatarView(
+                    name: payload.title,
+                    imagePath: payload.avatarImagePath,
+                    size: 34,
+                    appBadge: "whatsapp"
+                )
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack {
+                        Text(payload.title)
+                            .font(.system(size: 13.5, weight: .bold))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                        
+                        Spacer()
+                        
+                        Text(payload.timestampText ?? "now")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.white.opacity(0.45))
+                        
+                        // Close / Cancel Button
+                        Button(action: {
+                            state.dismissHUD()
+                        }) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(.white.opacity(0.65))
+                                .padding(4)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                    
+                    Text(payload.subtitle ?? "Pesan baru")
+                        .font(.system(size: 11.5, weight: .regular))
+                        .foregroundColor(.white.opacity(0.85))
+                        .lineLimit(1)
+                }
+            }
             
-            // Bottom: Inline Quick Reply Capsule (Screenshot 5)
+            // Bottom Row: Inline Quick Reply Capsule
             HStack(spacing: 8) {
-                TextField("WhatsApp", text: $replyText, onCommit: {
+                TextField("Ketik balasan...", text: $replyText, onCommit: {
                     sendReply()
                 })
                 .focused($isFieldFocused)
@@ -370,15 +452,18 @@ public struct WhatsAppToastContentView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                isFieldFocused = true
+            }
+        }
     }
     
     private func sendReply() {
         let text = replyText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         WhatsAppNotificationService.shared.sendQuickReply(text: text)
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
-            IslandState.shared.activeHUD = nil
-        }
+        state.dismissHUD()
     }
 }
 

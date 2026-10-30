@@ -29,7 +29,7 @@ public struct NotchRootView: View {
             } else if hud.type == .bluetooth {
                 return 360
             } else if hud.type == .whatsapp {
-                return 420
+                return state.isReplyingWhatsApp ? 420 : 380
             } else if hud.type == .incomingCall {
                 let isVideo = hud.iconName == "video.fill" || (hud.subtitle?.lowercased().contains("video") == true)
                 return isVideo ? 520 : 420
@@ -56,7 +56,7 @@ public struct NotchRootView: View {
             } else if hud.type == .bluetooth {
                 return 48
             } else if hud.type == .whatsapp {
-                return 96
+                return state.isReplyingWhatsApp ? 96 : 52
             } else if hud.type == .incomingCall {
                 let isVideo = hud.iconName == "video.fill" || (hud.subtitle?.lowercased().contains("video") == true)
                 return isVideo ? 92 : 66
