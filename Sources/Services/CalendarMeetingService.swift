@@ -103,6 +103,7 @@ public final class CalendarMeetingService: ObservableObject {
     @Published public var nextMeeting: MeetingItem? = nil
     @Published public var hasCalendarAccess: Bool = false
     
+    private var dismissedMeetingIDs: Set<String> = []
     private let eventStore = EKEventStore()
     private var refreshTimer: Timer?
     private var cancellables = Set<AnyCancellable>()
@@ -125,7 +126,8 @@ public final class CalendarMeetingService: ObservableObject {
                         if granted {
                             self?.fetchEvents()
                         } else {
-                            self?.loadSampleMeetingIfNeeded()
+                            self?.upcomingMeetings = []
+                            self?.nextMeeting = nil
                         }
                     }
                 }
@@ -136,14 +138,16 @@ public final class CalendarMeetingService: ObservableObject {
                         if granted {
                             self?.fetchEvents()
                         } else {
-                            self?.loadSampleMeetingIfNeeded()
+                            self?.upcomingMeetings = []
+                            self?.nextMeeting = nil
                         }
                     }
                 }
             }
         } else {
             self.hasCalendarAccess = false
-            self.loadSampleMeetingIfNeeded()
+            self.upcomingMeetings = []
+            self.nextMeeting = nil
         }
     }
     
@@ -156,7 +160,10 @@ public final class CalendarMeetingService: ObservableObject {
     
     public func fetchEvents() {
         guard hasCalendarAccess else {
-            loadSampleMeetingIfNeeded()
+            DispatchQueue.main.async {
+                self.upcomingMeetings = []
+                self.nextMeeting = nil
+            }
             return
         }
         
@@ -170,16 +177,25 @@ public final class CalendarMeetingService: ObservableObject {
             
             var meetings: [MeetingItem] = []
             for ev in ekEvents {
+                // Ignore all-day events (e.g. holidays like "Hari Pahlawan", birthdays, leaves)
+                guard !ev.isAllDay else { continue }
                 guard let title = ev.title, !title.isEmpty else { continue }
+                
                 let (url, platform) = self.extractMeetingURL(from: ev)
+                // Only keep events that have an online video meeting link (Google Meet, Zoom, Teams, Webex)
+                guard let meetingURL = url, platform != .other else { continue }
+                
+                let eventId = ev.eventIdentifier ?? UUID().uuidString
+                guard !self.dismissedMeetingIDs.contains(eventId) else { continue }
+                
                 let item = MeetingItem(
-                    id: ev.eventIdentifier ?? UUID().uuidString,
+                    id: eventId,
                     title: title,
                     startDate: ev.startDate,
                     endDate: ev.endDate,
-                    meetingURL: url,
+                    meetingURL: meetingURL,
                     platform: platform,
-                    isAllDay: ev.isAllDay
+                    isAllDay: false
                 )
                 meetings.append(item)
             }
@@ -188,10 +204,7 @@ public final class CalendarMeetingService: ObservableObject {
             
             DispatchQueue.main.async {
                 self.upcomingMeetings = meetings
-                self.nextMeeting = meetings.first(where: { $0.endDate > Date() })
-                if self.nextMeeting == nil {
-                    self.loadSampleMeetingIfNeeded()
-                }
+                self.nextMeeting = meetings.first(where: { !self.dismissedMeetingIDs.contains($0.id) && $0.endDate > Date() })
             }
         }
     }
@@ -243,21 +256,17 @@ public final class CalendarMeetingService: ObservableObject {
         return nil
     }
     
-    public func loadSampleMeetingIfNeeded() {
-        guard nextMeeting == nil else { return }
-        // Provide a smart sample meeting 5 minutes from now so the UI is immediately interactive
-        let start = Date().addingTimeInterval(300) // in 5 mins
-        let end = start.addingTimeInterval(2700)   // 45 mins long
-        let sample = MeetingItem(
-            id: "sample_sync_meeting",
-            title: "Product Sprint & Design Sync",
-            startDate: start,
-            endDate: end,
-            meetingURL: URL(string: "https://meet.google.com/abc-defg-hij"),
-            platform: .googleMeet
-        )
-        self.nextMeeting = sample
-        self.upcomingMeetings = [sample]
+    public func clearMeetings() {
+        self.upcomingMeetings = []
+        self.nextMeeting = nil
+    }
+    
+    public func dismissMeeting(_ meeting: MeetingItem) {
+        dismissedMeetingIDs.insert(meeting.id)
+        upcomingMeetings.removeAll { $0.id == meeting.id }
+        if nextMeeting?.id == meeting.id {
+            nextMeeting = upcomingMeetings.first(where: { !dismissedMeetingIDs.contains($0.id) && $0.endDate > Date() })
+        }
     }
     
     public func joinMeeting(_ meeting: MeetingItem) {
