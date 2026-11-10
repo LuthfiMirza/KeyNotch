@@ -6,6 +6,7 @@ public struct NotchRootView: View {
     @ObservedObject var media = MediaRemoteService.shared
     @ObservedObject var transfer = DownloadTransferService.shared
     @ObservedObject var shelf = FileShelfService.shared
+    @ObservedObject var reminders = ReminderService.shared
     @State private var dragOffset: CGFloat = 0
     
     public init() {}
@@ -233,12 +234,7 @@ public struct NotchRootView: View {
     }
     
     private var pendingRemindersCount: Int {
-        if let data = UserDefaults.standard.data(forKey: "keynotch_quick_notes"),
-           let notes = try? JSONDecoder().decode([NoteItem].self, from: data) {
-            let pending = notes.filter { !$0.isCompleted }.count
-            return max(1, pending)
-        }
-        return 2
+        reminders.pendingCount
     }
     
     private var expandedView: some View {
