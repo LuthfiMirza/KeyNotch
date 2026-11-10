@@ -1,25 +1,10 @@
 import SwiftUI
 
-public struct NoteItem: Identifiable, Codable, Equatable {
-    public var id: UUID = UUID()
-    public var text: String
-    public var isCompleted: Bool
-    public var createdAt: Date
-    
-    public init(text: String, isCompleted: Bool = false, createdAt: Date = Date()) {
-        self.text = text
-        self.isCompleted = isCompleted
-        self.createdAt = createdAt
-    }
-}
-
 public struct NotesTimerTabView: View {
+    @ObservedObject var reminders = ReminderService.shared
     @ObservedObject var pomodoro = PomodoroService.shared
     @ObservedObject var calendar = CalendarMeetingService.shared
-    @State private var notes: [NoteItem] = []
     @State private var newNoteText: String = ""
-    
-    private let notesKey = "keynotch_quick_notes"
     
     public init() {}
     
@@ -38,35 +23,52 @@ public struct NotesTimerTabView: View {
         }
         .padding(.horizontal, 14)
         .padding(.top, 2)
-        .onAppear {
-            loadNotes()
-        }
     }
     
     // MARK: - Notes Column
     
     private var notesColumn: some View {
         VStack(spacing: 7) {
-            // Header & Count
+            // Header & Count (Non-redundant section title)
             HStack {
                 HStack(spacing: 5) {
                     Image(systemName: "checklist")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundColor(.yellow)
-                    Text("Reminders")
+                    Text("To-Do List")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundColor(.white)
                 }
                 
                 Spacer()
                 
-                let remaining = notes.filter { !$0.isCompleted }.count
-                Text("\(remaining) pending")
-                    .font(.system(size: 10))
-                    .foregroundColor(.white.opacity(0.5))
+                let remaining = reminders.pendingCount
+                if remaining > 0 {
+                    Text("\(remaining) pending")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.white.opacity(0.55))
+                } else if !reminders.notes.isEmpty {
+                    Text("All done 🎉")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.green.opacity(0.85))
+                }
+                
+                if reminders.completedCount > 0 {
+                    Button(action: {
+                        withAnimation {
+                            reminders.clearCompleted()
+                        }
+                    }) {
+                        Text("Clear done")
+                            .font(.system(size: 9.5))
+                            .foregroundColor(.white.opacity(0.4))
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .help("Hapus tugas yang sudah selesai")
+                }
             }
             
-            // 📅 1-Click Meeting Join Banner
+            // 📅 Real Calendar Meeting Banner (Only shown when actual meeting is scheduled)
             if let meeting = calendar.nextMeeting {
                 meetingBanner(meeting)
             }
@@ -102,21 +104,27 @@ public struct NotesTimerTabView: View {
             // Scrollable Task List
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 5) {
-                    if notes.isEmpty {
-                        VStack(spacing: 4) {
+                    if reminders.notes.isEmpty {
+                        VStack(spacing: 5) {
+                            Image(systemName: "checkmark.circle")
+                                .font(.system(size: 15))
+                                .foregroundColor(.white.opacity(0.2))
                             Text("No reminders")
-                                .font(.system(size: 11))
-                                .foregroundColor(.white.opacity(0.4))
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(.white.opacity(0.45))
+                            Text("Type a task above and press Return")
+                                .font(.system(size: 9.5))
+                                .foregroundColor(.white.opacity(0.25))
                         }
-                        .padding(.top, calendar.nextMeeting != nil ? 10 : 20)
+                        .padding(.top, calendar.nextMeeting != nil ? 10 : 22)
                     } else {
-                        ForEach(notes) { note in
+                        ForEach(reminders.notes) { note in
                             noteRow(note)
                         }
                     }
                 }
             }
-            .frame(height: calendar.nextMeeting != nil ? 62 : 100)
+            .frame(height: calendar.nextMeeting != nil ? 70 : 130)
         }
     }
     
@@ -178,6 +186,22 @@ public struct NotesTimerTabView: View {
                 }
                 .buttonStyle(PlainButtonStyle())
             }
+            
+            // Dismiss / Selesai Button
+            Button(action: {
+                withAnimation {
+                    calendar.dismissMeeting(meeting)
+                }
+            }) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundColor(.white.opacity(0.45))
+                    .padding(5)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(PlainButtonStyle())
+            .help("Selesaikan / sembunyikan acara ini")
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
@@ -195,7 +219,9 @@ public struct NotesTimerTabView: View {
         HStack(spacing: 8) {
             // iOS Style Circular Checkbox
             Button(action: {
-                toggleNote(note)
+                withAnimation(.spring(response: 0.25, dampingFraction: 0.75)) {
+                    reminders.toggleNote(note)
+                }
             }) {
                 ZStack {
                     Circle()
@@ -225,7 +251,9 @@ public struct NotesTimerTabView: View {
             
             // Delete Note Button
             Button(action: {
-                deleteNote(note)
+                withAnimation {
+                    reminders.deleteNote(note)
+                }
             }) {
                 Image(systemName: "xmark")
                     .font(.system(size: 8, weight: .bold))
@@ -242,39 +270,10 @@ public struct NotesTimerTabView: View {
     private func addNote() {
         let trimmed = newNoteText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        let newItem = NoteItem(text: trimmed)
-        notes.insert(newItem, at: 0)
-        newNoteText = ""
-        saveNotes()
-    }
-    
-    private func toggleNote(_ note: NoteItem) {
-        if let idx = notes.firstIndex(where: { $0.id == note.id }) {
-            withAnimation(.spring(response: 0.25, dampingFraction: 0.75)) {
-                notes[idx].isCompleted.toggle()
-            }
-            saveNotes()
-        }
-    }
-    
-    private func deleteNote(_ note: NoteItem) {
         withAnimation {
-            notes.removeAll { $0.id == note.id }
+            reminders.addNote(text: trimmed)
         }
-        saveNotes()
-    }
-    
-    private func saveNotes() {
-        if let data = try? JSONEncoder().encode(notes) {
-            UserDefaults.standard.set(data, forKey: notesKey)
-        }
-    }
-    
-    private func loadNotes() {
-        if let data = UserDefaults.standard.data(forKey: notesKey),
-           let saved = try? JSONDecoder().decode([NoteItem].self, from: data) {
-            self.notes = saved
-        }
+        newNoteText = ""
     }
     
     // MARK: - Pomodoro Focus Timer Column
